@@ -9,11 +9,31 @@ LLM_BACKEND = os.getenv("LLM_BACKEND", "mock")
 LLM_BASE_URL = os.getenv("LLM_BASE_URL", "http://localhost:8000/v1")
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
 
-def get_llm_response(system_prompt: str, user_prompt: str, temperature: float = 0.2) -> str:
+def get_llm_response(system_prompt: str, user_prompt: str, temperature: float = 0.2, api_key: str = None) -> str:
     """
-    Unified LLM Client handling mock, vllm, and groq backends with graceful fallbacks.
+    Unified LLM Client handling gemini, mock, vllm, and groq backends with graceful fallbacks.
     Returns JSON string (expected by predictors).
     """
+    if api_key:
+        try:
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key={api_key}"
+            headers = {"Content-Type": "application/json"}
+            data = {
+                "contents": [
+                    {"role": "user", "parts": [{"text": system_prompt + "\n\n" + user_prompt}]}
+                ],
+                "generationConfig": {
+                    "temperature": temperature,
+                    "responseMimeType": "application/json"
+                }
+            }
+            resp = requests.post(url, headers=headers, json=data, timeout=30)
+            resp.raise_for_status()
+            return resp.json()["candidates"][0]["content"]["parts"][0]["text"]
+        except Exception as e:
+            print(f"[LLM Client] Gemini failed: {e}")
+            raise Exception(f"Gemini API Error: {e}")
+
     if LLM_BACKEND == "mock":
         return _mock_rfi_prediction()
         

@@ -159,7 +159,7 @@ export default function VoiceSearchBar() {
           type="text" 
           value={transcript}
           onChange={(e) => setTranscript(e.target.value)}
-          placeholder={state === 'IDLE' ? "Ask the wall... (Tap mic or type)" : "Listening..."}
+          placeholder={state === 'IDLE' ? "FieldPilot AI... (Tap mic or type)" : "Listening..."}
           className="bg-transparent border-none outline-none text-white w-full text-sm placeholder-white/30"
           readOnly={state === 'RECORDING' || state === 'PROCESSING'}
         />

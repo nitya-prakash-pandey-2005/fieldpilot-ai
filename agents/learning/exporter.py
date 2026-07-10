@@ -8,7 +8,7 @@ logger = logging.getLogger(__name__)
 
 class DatasetExporter:
     def __init__(self):
-        self.pg_uri = os.getenv("POSTGRES_URI", "postgresql://postgres:password@localhost:5432/askthewall")
+        self.pg_uri = os.getenv("POSTGRES_URI", "postgresql://atw_user:atw_dev_password@localhost:5432/askthewall")
 
     async def _get_all_incidents(self) -> List[Dict[str, Any]]:
         conn = await asyncpg.connect(self.pg_uri)
@@ -81,15 +81,21 @@ class DatasetExporter:
             zone = inc['zone_id']
             by_zone[zone] = by_zone.get(zone, 0) + 1
             
-            # JSON parsing
-            res = json.loads(inc['resolution']) if isinstance(inc['resolution'], str) else inc['resolution']
-            out = json.loads(inc['outcome_metrics']) if isinstance(inc['outcome_metrics'], str) else inc['outcome_metrics']
+            # JSON parsing with safety for None values
+            res_raw = inc.get('resolution') or "{}"
+            out_raw = inc.get('outcome_metrics') or "{}"
+            
+            res = json.loads(res_raw) if isinstance(res_raw, str) else res_raw
+            out = json.loads(out_raw) if isinstance(out_raw, str) else out_raw
+            
+            if not isinstance(res, dict): res = {}
+            if not isinstance(out, dict): out = {}
             
             total_time += float(res.get('time_to_resolve_hours', 0))
             if not res.get('rework_required', True):
                 rework_prevented += 1
                 
-            total_cost_usd += float(out.get('cost_avoided_usd', 0))
+            total_cost_usd += float(out.get('cost_avoided_usd', out.get('cost_avoided', 0)))
             
             cause = res.get('resolution_notes', 'unknown').lower()
             if 'formwork' in cause:

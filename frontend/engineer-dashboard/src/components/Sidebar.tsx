@@ -28,7 +28,7 @@ export function Sidebar() {
         <div className="w-8 h-8 rounded-md bg-blue-600 flex items-center justify-center">
           <Box size={20} className="text-white" />
         </div>
-        <span className="text-xl font-bold text-white tracking-tight">ASK THE WALL</span>
+        <span className="text-xl font-bold text-white tracking-tight">FIELDPILOT AI</span>
       </div>
       
       <nav className="flex-1 overflow-y-auto py-6 px-4 space-y-1">

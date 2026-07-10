@@ -21,7 +21,7 @@ export default function Dashboard() {
             <Activity className="text-atw-cyan" size={18} />
           </div>
           <div>
-            <h1 className="text-lg font-semibold tracking-wide">ASK THE WALL <span className="text-white/50 text-sm font-normal">| COMMAND CENTER</span></h1>
+            <h1 className="text-lg font-semibold tracking-wide">FIELDPILOT AI <span className="text-white/50 text-sm font-normal">| COMMAND CENTER</span></h1>
           </div>
         </div>
         
@@ -41,7 +41,7 @@ export default function Dashboard() {
       </header>
 
       {/* Main Content Area */}
-      <div className="flex-1 p-6 overflow-y-auto">
+      <div className="flex-1 p-6 overflow-y-auto min-h-0">
         
         {/* KPI Row (Phase 1 wiring) */}
         <div className="mb-6">
@@ -52,7 +52,7 @@ export default function Dashboard() {
         <div className="grid grid-cols-12 gap-6 h-[650px]">
           
           {/* Live Site Map */}
-          <div className="col-span-7 h-full flex flex-col">
+          <div className="col-span-7 h-full flex flex-col relative">
             <LiveSiteMap lastEvent={lastEvent} />
           </div>
 

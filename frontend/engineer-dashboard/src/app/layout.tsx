@@ -32,9 +32,9 @@ export default function RootLayout({
     >
       <body className="min-h-full flex flex-col bg-[var(--bg)] text-[var(--text-primary)] flex-row transition-colors duration-300">
         <Providers>
-          <div className="flex w-full min-h-screen">
+          <div className="flex w-full min-h-screen h-screen overflow-hidden">
             <Sidebar />
-            <main className="flex-1 flex flex-col h-screen overflow-y-auto">
+            <main className="flex-1 flex flex-col min-h-0 h-full overflow-y-auto">
               {children}
             </main>
           </div>

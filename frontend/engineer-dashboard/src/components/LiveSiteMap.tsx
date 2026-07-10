@@ -1,4 +1,6 @@
 import React, { useEffect, useState } from 'react';
+import { mockZones } from '@/data/mockData';
+import { Activity, ShieldAlert, X } from 'lucide-react';
 
 interface ZoneState {
   id: string;
@@ -9,43 +11,21 @@ interface ZoneState {
   h: number;
 }
 
-export default function LiveSiteMap({ lastEvent }: { lastEvent: any }) {
+export default function LiveSiteMap({ lastEvent }: { lastEvent?: any }) {
   const [zones, setZones] = useState<ZoneState[]>([
-    { id: 'A12', status: 'GREEN', x: 105, y: 105, w: 190, h: 190 },
-    { id: 'B3', status: 'GREEN', x: 305, y: 105, w: 190, h: 190 },
-    { id: 'C7', status: 'GREEN', x: 505, y: 105, w: 190, h: 390 }
+    { id: 'A12', status: mockZones.find(z => z.id === 'A12')?.status as any || 'RED', x: 105, y: 105, w: 190, h: 190 },
+    { id: 'B3', status: mockZones.find(z => z.id === 'B3')?.status as any || 'AMBER', x: 305, y: 105, w: 190, h: 190 },
+    { id: 'C7', status: mockZones.find(z => z.id === 'C7')?.status as any || 'GREEN', x: 505, y: 105, w: 190, h: 390 }
   ]);
-  
   const [activeDots, setActiveDots] = useState<any[]>([]);
+  const [selectedZoneId, setSelectedZoneId] = useState<string | null>(null);
 
-  useEffect(() => {
-    const fetchZoneStatus = async () => {
-      try {
-        const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/v1/graph/project/P-001/zones`);
-        const data = await res.json();
-        if (data.status === 'success' && data.data) {
-          const apiZones = data.data;
-          setZones(apiZones.map((az: any) => {
-            let s = 'GREEN';
-            if (az.status === 'critical') s = 'RED';
-            else if (az.status === 'amber') s = 'AMBER';
-            
-            return {
-              id: az.zone_id,
-              status: s,
-              x: az.coordinates.x,
-              y: az.coordinates.y,
-              w: az.zone_id === 'C7' ? 190 : 190,  // fallback widths since only x/y provided in seed
-              h: az.zone_id === 'C7' ? 390 : 190
-            };
-          }));
-        }
-      } catch (e) {
-        console.error("Failed to fetch zone statuses", e);
-      }
-    };
-    fetchZoneStatus();
-  }, []);
+  const selectedZoneData = mockZones.find(z => z.id === selectedZoneId);
+
+  // Use mock data immediately, no need to fetch for this demo
+  /*
+  useEffect(() => { ... }, []);
+  */
 
   useEffect(() => {
     if (!lastEvent) return;
@@ -91,7 +71,7 @@ export default function LiveSiteMap({ lastEvent }: { lastEvent: any }) {
   };
 
   return (
-    <div className="w-full h-full relative rounded-xl border border-white/10 bg-[#0A1628]/80 backdrop-blur-md overflow-hidden p-4 shadow-2xl">
+    <div className="absolute inset-0 rounded-xl border border-white/10 bg-[#0A1628]/80 backdrop-blur-md overflow-hidden p-4 shadow-2xl">
       <h2 className="text-sm font-semibold tracking-wide text-white/80 absolute top-4 left-4 z-10 flex items-center gap-2 uppercase">
         Live Digital Twin
       </h2>
@@ -119,14 +99,20 @@ export default function LiveSiteMap({ lastEvent }: { lastEvent: any }) {
         {/* Zones */}
         {zones.map(z => {
           const colors = getZoneColor(z.status);
+          const isSelected = selectedZoneId === z.id;
           return (
-            <g key={z.id} className="cursor-pointer transition-all duration-500 hover:opacity-100 group" style={{ filter: colors.glow }}>
+            <g 
+              key={z.id} 
+              className="cursor-pointer transition-all duration-500 hover:opacity-100 group" 
+              style={{ filter: colors.glow }}
+              onClick={() => setSelectedZoneId(z.id)}
+            >
               <rect 
                 x={z.x} y={z.y} width={z.w} height={z.h} 
-                fill={colors.fill} 
-                stroke={colors.stroke} 
-                strokeWidth={z.status !== 'GREEN' ? 2 : 0}
-                className="transition-all duration-500"
+                fill={isSelected ? colors.fill.replace('0.2', '0.4').replace('0.05', '0.15') : colors.fill} 
+                stroke={isSelected ? '#FFFFFF' : colors.stroke} 
+                strokeWidth={isSelected || z.status !== 'GREEN' ? 3 : 0}
+                className="transition-all duration-300"
               />
               <text 
                 x={z.x + 45} y={z.y + 95} 
@@ -148,6 +134,41 @@ export default function LiveSiteMap({ lastEvent }: { lastEvent: any }) {
           </g>
         ))}
       </svg>
+
+      {/* Selected Zone Detail Panel */}
+      {selectedZoneData && (
+        <div className="absolute top-4 right-4 w-72 bg-black/80 backdrop-blur-xl border border-white/20 rounded-xl p-5 shadow-2xl z-20 animate-fade-in">
+          <div className="flex justify-between items-start mb-4">
+            <div>
+              <span className={`text-[10px] uppercase tracking-widest font-bold px-2 py-0.5 rounded border mb-2 inline-block ${
+                selectedZoneData.status === 'RED' ? 'bg-atw-red/20 text-atw-red border-atw-red/30' : 
+                selectedZoneData.status === 'AMBER' ? 'bg-atw-amber/20 text-atw-amber border-atw-amber/30' : 
+                'bg-atw-green/20 text-atw-green border-atw-green/30'
+              }`}>
+                {selectedZoneData.status === 'RED' ? 'CRITICAL RISK' : selectedZoneData.status === 'AMBER' ? 'ELEVATED RISK' : 'NORMAL'}
+              </span>
+              <h3 className="text-white font-bold text-lg leading-tight">{selectedZoneData.name}</h3>
+            </div>
+            <button 
+              onClick={() => setSelectedZoneId(null)}
+              className="text-white/50 hover:text-white transition-colors p-1"
+            >
+              <X size={16} />
+            </button>
+          </div>
+
+          <div className="space-y-3">
+            <div className="flex items-center justify-between bg-white/5 p-3 rounded-lg border border-white/5">
+              <span className="text-white/50 text-xs flex items-center gap-2"><ShieldAlert size={14} /> Active Issues</span>
+              <span className="text-white font-bold">{selectedZoneData.active_issues}</span>
+            </div>
+            <div className="flex items-center justify-between bg-white/5 p-3 rounded-lg border border-white/5">
+              <span className="text-white/50 text-xs flex items-center gap-2"><Activity size={14} /> Risk Score</span>
+              <span className="text-white font-bold">{Math.round(selectedZoneData.risk_score * 100)}/100</span>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

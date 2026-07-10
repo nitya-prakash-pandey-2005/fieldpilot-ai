@@ -1,12 +1,14 @@
 import React, { useEffect, useState } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { StyleSheet, View, Text } from 'react-native';
-import { NavigationContainer, DarkTheme } from '@react-navigation/native';
+import { NavigationContainer, DarkTheme, DefaultTheme } from '@react-navigation/native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { TabNavigator } from './src/navigation/TabNavigator';
 import config from './src/config';
+import { ThemeProvider, useTheme } from './src/context/ThemeContext';
 
-export default function App() {
+function AppContent() {
+  const { isDarkMode, colors } = useTheme();
   const [isHealthy, setIsHealthy] = useState<boolean | null>(null);
 
   useEffect(() => {
@@ -26,22 +28,30 @@ export default function App() {
   }, []);
 
   return (
-    <SafeAreaProvider>
-      <SafeAreaView style={styles.container} edges={['top']}>
-        {/* Connection Status Header */}
-        <View style={styles.header}>
-          <Text style={styles.headerTitle}>ASK THE WALL</Text>
-          <View style={styles.healthBadge}>
-            <View style={[styles.healthDot, { backgroundColor: isHealthy ? '#22c55e' : isHealthy === false ? '#ef4444' : '#64748b' }]} />
-            <Text style={styles.healthText}>{isHealthy ? 'Online' : 'Offline'}</Text>
-          </View>
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.bg }]} edges={['top']}>
+      {/* Connection Status Header */}
+      <View style={[styles.header, { backgroundColor: colors.surface, borderBottomColor: colors.border }]}>
+        <Text style={[styles.headerTitle, { color: colors.text }]}>FIELDPILOT AI</Text>
+        <View style={[styles.healthBadge, { backgroundColor: colors.surfaceVariant, borderColor: colors.border }]}>
+          <View style={[styles.healthDot, { backgroundColor: isHealthy ? colors.success : isHealthy === false ? colors.error : colors.textSecondary }]} />
+          <Text style={[styles.healthText, { color: colors.textSecondary }]}>{isHealthy ? 'Online' : 'Offline'}</Text>
         </View>
+      </View>
 
-        <NavigationContainer theme={DarkTheme}>
-          <TabNavigator />
-        </NavigationContainer>
-        <StatusBar style="light" />
-      </SafeAreaView>
+      <NavigationContainer theme={isDarkMode ? DarkTheme : DefaultTheme}>
+        <TabNavigator />
+      </NavigationContainer>
+      <StatusBar style={isDarkMode ? "light" : "dark"} />
+    </SafeAreaView>
+  );
+}
+
+export default function App() {
+  return (
+    <SafeAreaProvider>
+      <ThemeProvider>
+        <AppContent />
+      </ThemeProvider>
     </SafeAreaProvider>
   );
 }
@@ -49,7 +59,6 @@ export default function App() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#1e1e1e',
   },
   header: {
     flexDirection: 'row',
@@ -57,12 +66,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 16,
     paddingVertical: 12,
-    backgroundColor: '#1e1e1e',
     borderBottomWidth: 1,
-    borderBottomColor: '#333',
   },
   headerTitle: {
-    color: '#fff',
     fontSize: 18,
     fontWeight: 'bold',
     letterSpacing: 1,
@@ -70,12 +76,10 @@ const styles = StyleSheet.create({
   healthBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#2a2a2a',
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#333',
   },
   healthDot: {
     width: 8,
@@ -84,7 +88,6 @@ const styles = StyleSheet.create({
     marginRight: 6,
   },
   healthText: {
-    color: '#aaa',
     fontSize: 10,
     fontWeight: 'bold',
   }

@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 import uuid
 import sys
 import os
@@ -12,11 +12,14 @@ router = APIRouter(prefix="/api/v1/memory", tags=["Project Memory (Agent 7)"])
 retriever = MemoryRetriever()
 
 @router.post("/query")
-async def query_memory(req: MemoryRequest):
+async def query_memory(req: MemoryRequest, request: Request):
     """
     RAG over past RFIs, project specs, and previous issues to provide historical context.
     """
     try:
+        api_key = request.headers.get("X-Gemini-API-Key")
+        if api_key:
+            req.api_key = api_key
         # Await the async answer_query method
         result = await retriever.answer_query(req)
         return result

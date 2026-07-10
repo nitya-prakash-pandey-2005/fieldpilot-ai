@@ -1,71 +1,80 @@
 "use client";
-import { useState, useEffect } from 'react';
-import { Flame, ShieldAlert, CheckCircle2 } from 'lucide-react';
+import { Flame, ShieldAlert, Activity, HardHat } from 'lucide-react';
+import { mockZones } from '@/data/mockData';
 
 export default function ZonesPage() { 
-  const [zones, setZones] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/v1/graph/project/P-001/zones`)
-      .then(res => res.json())
-      .then(data => {
-        if (data.status === 'success') {
-          setZones(data.data);
-        }
-        setLoading(false);
-      })
-      .catch(() => {
-        // Fallback demo data
-        setZones([
-          { zone_id: 'A12', name: 'Zone A12', risk_score: 0.85, status: 'critical', active_issues: 3, coordinates: { x: 105, y: 105 } },
-          { zone_id: 'B3', name: 'Zone B3', risk_score: 0.45, status: 'amber', active_issues: 1, coordinates: { x: 305, y: 105 } },
-          { zone_id: 'C7', name: 'Zone C7', risk_score: 0.12, status: 'green', active_issues: 0, coordinates: { x: 505, y: 105 } }
-        ]);
-        setLoading(false);
-      });
-  }, []);
-
   return (
-    <div className="h-full p-8">
-      <h1 className="text-3xl font-bold text-white mb-6">High Risk Zones</h1>
-      
-      {loading ? (
-        <div className="flex justify-center py-12"><div className="w-8 h-8 rounded-full border-2 border-t-atw-cyan animate-spin"></div></div>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {zones.map((zone) => (
-            <div key={zone.zone_id} className={`bg-atw-surface/40 backdrop-blur-md border rounded-xl p-6 shadow-2xl transition-all ${
-              zone.status === 'critical' ? 'border-atw-red/50 shadow-[0_0_15px_rgba(239,68,68,0.2)]' : 
-              zone.status === 'amber' ? 'border-atw-amber/50' : 'border-white/10'
-            }`}>
-              <div className="flex justify-between items-start mb-4">
-                <h3 className="text-xl font-bold text-white">{zone.name}</h3>
-                {zone.status === 'critical' && <Flame className="text-atw-red" size={24} />}
-                {zone.status === 'amber' && <ShieldAlert className="text-atw-amber" size={24} />}
-                {zone.status === 'green' && <CheckCircle2 className="text-atw-green" size={24} />}
-              </div>
+    <div className="h-full p-8 flex flex-col min-h-0 bg-atw-bg">
+      <div className="flex items-center justify-between mb-8">
+        <div>
+          <h1 className="text-3xl font-bold text-white tracking-tight flex items-center gap-3">
+            <Flame className="text-orange-500" size={32} />
+            High Risk Zones
+          </h1>
+          <p className="text-white/50 mt-2">Aggregated risk scoring based on active issues, historical RFIs, and real-time activity.</p>
+        </div>
+      </div>
+
+      <div className="flex-1 overflow-y-auto min-h-0">
+        <div className="flex flex-col gap-6 pb-10">
+          {mockZones.sort((a, b) => b.risk_score - a.risk_score).map((zone) => (
+            <div key={zone.id} className="bg-[#12121A] border border-white/10 rounded-xl p-6 shadow-2xl relative overflow-hidden group hover:border-white/20 transition-colors">
+              <div className={`absolute top-0 left-0 w-1 h-full ${
+                zone.status === 'RED' ? 'bg-atw-red' : 
+                zone.status === 'AMBER' ? 'bg-atw-amber' : 'bg-atw-green'
+              }`}></div>
               
-              <div className="space-y-3">
-                <div className="flex justify-between">
-                  <span className="text-gray-400">Risk Score</span>
-                  <span className={`font-mono font-bold ${
-                    zone.status === 'critical' ? 'text-atw-red' : zone.status === 'amber' ? 'text-atw-amber' : 'text-atw-green'
-                  }`}>{(zone.risk_score * 100).toFixed(0)}%</span>
+              <div className="flex flex-col md:flex-row gap-8 items-start md:items-center justify-between">
+                
+                {/* Info Block */}
+                <div className="flex-1">
+                  <div className="flex items-center gap-3 mb-2">
+                    <span className={`text-xs font-bold px-2 py-0.5 rounded uppercase tracking-widest ${
+                      zone.status === 'RED' ? 'bg-atw-red/20 text-atw-red border border-atw-red/30' : 
+                      zone.status === 'AMBER' ? 'bg-atw-amber/20 text-atw-amber border border-atw-amber/30' : 
+                      'bg-atw-green/20 text-atw-green border border-atw-green/30'
+                    }`}>
+                      {zone.status === 'RED' ? 'CRITICAL RISK' : zone.status === 'AMBER' ? 'ELEVATED RISK' : 'NORMAL'}
+                    </span>
+                    <span className="text-white/40 text-sm font-mono tracking-wider">ZONE {zone.id}</span>
+                  </div>
+                  <h3 className="text-white text-2xl font-bold mb-2">{zone.name}</h3>
+                  <div className="flex items-center gap-6 text-sm text-white/60">
+                    <span className="flex items-center gap-2"><Activity size={16} className="text-atw-cyan" /> {zone.recent_activity}</span>
+                    <span className="flex items-center gap-2"><HardHat size={16} className="text-atw-amber" /> {zone.active_workers} Active Workers</span>
+                    <span className="flex items-center gap-2"><ShieldAlert size={16} className={zone.active_issues > 0 ? "text-atw-red" : "text-white/40"} /> {zone.active_issues} Open Issues</span>
+                  </div>
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-400">Active Issues</span>
-                  <span className="text-white font-bold">{zone.active_issues}</span>
+
+                {/* Risk Score Block */}
+                <div className="w-full md:w-64 bg-black/40 border border-white/5 rounded-lg p-4 flex flex-col items-center justify-center">
+                  <span className="text-[10px] uppercase tracking-widest text-white/40 font-bold mb-1">Risk Score</span>
+                  <div className="flex items-end gap-1 mb-3">
+                    <span className={`text-4xl font-black tracking-tighter ${
+                      zone.risk_score > 0.7 ? 'text-atw-red' : 
+                      zone.risk_score > 0.3 ? 'text-atw-amber' : 'text-atw-green'
+                    }`}>
+                      {Math.round(zone.risk_score * 100)}
+                    </span>
+                    <span className="text-white/30 text-lg mb-1 font-bold">/ 100</span>
+                  </div>
+                  <div className="w-full bg-white/10 h-2 rounded-full overflow-hidden">
+                    <div 
+                      className={`h-full rounded-full transition-all duration-1000 ${
+                        zone.risk_score > 0.7 ? 'bg-atw-red shadow-[0_0_10px_rgba(255,59,59,0.8)]' : 
+                        zone.risk_score > 0.3 ? 'bg-atw-amber shadow-[0_0_10px_rgba(255,179,0,0.8)]' : 
+                        'bg-atw-green shadow-[0_0_10px_rgba(0,200,81,0.8)]'
+                      }`} 
+                      style={{ width: `${zone.risk_score * 100}%` }}
+                    ></div>
+                  </div>
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-400">Location Coordinates</span>
-                  <span className="text-gray-300 font-mono text-sm">[{zone.coordinates?.x}, {zone.coordinates?.y}]</span>
-                </div>
+
               </div>
             </div>
           ))}
         </div>
-      )}
+      </div>
     </div>
   ); 
 }

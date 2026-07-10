@@ -2,8 +2,10 @@ import React, { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, ScrollView, StyleSheet, KeyboardAvoidingView, Platform, ActivityIndicator } from 'react-native';
 import { Send, FileText, CheckCircle2 } from 'lucide-react-native';
 import config from '../config';
+import { useTheme } from '../context/ThemeContext';
 
 export function AskAIScreen() {
+  const { colors, geminiApiKey, apiBaseUrl } = useTheme();
   const [query, setQuery] = useState('');
   const [messages, setMessages] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
@@ -17,9 +19,14 @@ export function AskAIScreen() {
     setLoading(true);
 
     try {
-      const response = await fetch(`${config.API_BASE_URL}/api/v1/memory/query`, {
+      const baseUrl = apiBaseUrl || config.API_BASE_URL;
+      const response = await fetch(`${baseUrl}/api/v1/memory/query`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'X-Gemini-API-Key': geminiApiKey,
+          'Bypass-Tunnel-Reminder': 'true'
+        },
         body: JSON.stringify({
           query: userMessage.content,
           project_id: "P-001",
@@ -28,11 +35,22 @@ export function AskAIScreen() {
         })
       });
       
-      const data = await response.json();
+      const text = await response.text();
+      let data;
+      try {
+        data = JSON.parse(text);
+      } catch (e) {
+        throw new Error(text.substring(0, 50));
+      }
+      
+      if (!response.ok) {
+        throw new Error(data.detail || `Server error: ${response.status}`);
+      }
+      
       setMessages(prev => [...prev, { role: 'ai', content: data }]);
-    } catch (error) {
+    } catch (error: any) {
       console.error("AI Query Error", error);
-      setMessages(prev => [...prev, { role: 'ai', content: { answer: "Network error connecting to AI.", evidence: [] } }]);
+      setMessages(prev => [...prev, { role: 'ai', content: { answer: `Error: ${error.message || 'Network error connecting to AI.'}`, evidence: [] } }]);
     } finally {
       setLoading(false);
     }
@@ -40,33 +58,37 @@ export function AskAIScreen() {
 
   return (
     <KeyboardAvoidingView 
-      style={styles.container}
+      style={[styles.container, { backgroundColor: colors.bg }]}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      keyboardVerticalOffset={90}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
+      enabled={Platform.OS === 'ios'}
     >
       <ScrollView style={styles.chatContainer} contentContainerStyle={{ padding: 16 }}>
         {messages.map((msg, idx) => (
-          <View key={idx} style={[styles.messageBubble, msg.role === 'user' ? styles.userBubble : styles.aiBubble]}>
+          <View key={idx} style={[
+            styles.messageBubble, 
+            msg.role === 'user' ? [styles.userBubble, { backgroundColor: colors.primary }] : [styles.aiBubble, { backgroundColor: colors.surface, borderColor: colors.border }]
+          ]}>
             {msg.role === 'user' ? (
-              <Text style={styles.userText}>{msg.content}</Text>
+              <Text style={[styles.userText, { color: '#FFF' }]}>{msg.content}</Text>
             ) : (
               <View>
-                <Text style={styles.aiAnswer}>{msg.content.answer}</Text>
+                <Text style={[styles.aiAnswer, { color: colors.text }]}>{msg.content.answer}</Text>
                 
                 {msg.content.evidence && msg.content.evidence.length > 0 && (
-                  <View style={styles.evidenceContainer}>
-                    <Text style={styles.evidenceTitle}>Sources:</Text>
+                  <View style={[styles.evidenceContainer, { borderTopColor: colors.border }]}>
+                    <Text style={[styles.evidenceTitle, { color: colors.textSecondary }]}>Sources:</Text>
                     {msg.content.evidence.map((ev: any, eIdx: number) => (
-                      <View key={eIdx} style={styles.evidenceCard}>
+                      <View key={eIdx} style={[styles.evidenceCard, { backgroundColor: colors.surfaceVariant, borderColor: colors.primarySoft }]}>
                         <View style={styles.evidenceHeader}>
-                          <FileText size={14} color="#a855f7" />
-                          <Text style={styles.evidenceSource}>{ev.source_type.replace('_', ' ')}</Text>
-                          <Text style={styles.evidenceDate}>{ev.date}</Text>
+                          <FileText size={14} color={colors.primary} />
+                          <Text style={[styles.evidenceSource, { color: colors.primary }]}>{ev.source_type.replace('_', ' ')}</Text>
+                          <Text style={[styles.evidenceDate, { color: colors.textSecondary }]}>{ev.date}</Text>
                         </View>
-                        <Text style={styles.evidenceExcerpt}>"{ev.excerpt}"</Text>
+                        <Text style={[styles.evidenceExcerpt, { color: colors.text }]}>"{ev.excerpt}"</Text>
                         <View style={styles.evidenceFooter}>
-                          <CheckCircle2 size={12} color="#22c55e" />
-                          <Text style={styles.evidenceApprover}>Approved by {ev.approved_by}</Text>
+                          <CheckCircle2 size={12} color={colors.success} />
+                          <Text style={[styles.evidenceApprover, { color: colors.success }]}>Approved by {ev.approved_by}</Text>
                         </View>
                       </View>
                     ))}
@@ -77,23 +99,32 @@ export function AskAIScreen() {
           </View>
         ))}
         {loading && (
-          <View style={[styles.messageBubble, styles.aiBubble]}>
-            <ActivityIndicator color="#a855f7" />
+          <View style={[styles.messageBubble, styles.aiBubble, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <ActivityIndicator color={colors.primary} />
           </View>
         )}
       </ScrollView>
 
-      <View style={styles.inputContainer}>
+      <View style={[styles.inputContainer, { backgroundColor: colors.surface, borderTopColor: colors.border }]}>
         <TextInput
-          style={styles.input}
-          placeholder="Ask Project Memory..."
-          placeholderTextColor="#666"
+          style={[styles.input, { 
+            backgroundColor: colors.bg, 
+            color: colors.text, 
+            borderColor: colors.border 
+          }]}
+          placeholder={geminiApiKey ? "Ask Project Memory..." : "Please set API Key in Profile"}
+          placeholderTextColor={colors.textSecondary}
           value={query}
           onChangeText={setQuery}
           onSubmitEditing={handleSend}
+          editable={!!geminiApiKey}
         />
-        <TouchableOpacity style={styles.sendButton} onPress={handleSend}>
-          <Send color="#fff" size={20} />
+        <TouchableOpacity 
+          style={[styles.sendButton, { backgroundColor: geminiApiKey ? colors.primary : colors.surfaceVariant }]} 
+          onPress={handleSend}
+          disabled={!geminiApiKey}
+        >
+          <Send color={geminiApiKey ? "#fff" : colors.textSecondary} size={20} />
         </TouchableOpacity>
       </View>
     </KeyboardAvoidingView>

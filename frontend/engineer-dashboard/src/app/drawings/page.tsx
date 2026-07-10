@@ -1,64 +1,93 @@
 "use client";
-import { useState, useEffect } from 'react';
-import { FileBox, History, GitCommit } from 'lucide-react';
+import { FileBox, FileWarning, CheckCircle, Upload, Search } from 'lucide-react';
+import { toast } from 'sonner';
+import { mockDrawings } from '@/data/mockData';
 
 export default function DrawingsPage() { 
-  const [history, setHistory] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/v1/version-control/history/S-101`)
-      .then(res => res.json())
-      .then(data => {
-        if (data.history) {
-          setHistory(data.history);
-        }
-        setLoading(false);
-      })
-      .catch(() => {
-        setHistory([
-          { version: 3, state: 'Rebar Installed', timestamp: '2026-07-10T11:30:00Z' },
-          { version: 2, state: 'Formwork Installed', timestamp: '2026-07-09T10:00:00Z' },
-          { version: 1, state: 'Initial Design', timestamp: '2026-07-01T08:00:00Z' }
-        ]);
-        setLoading(false);
-      });
-  }, []);
-
   return (
-    <div className="h-full p-8 max-w-4xl mx-auto">
-      <div className="flex items-center gap-3 mb-8">
-        <FileBox className="text-atw-cyan" size={32} />
-        <h1 className="text-3xl font-bold text-white">Drawing Version Control</h1>
-      </div>
-      
-      <div className="bg-atw-surface/40 backdrop-blur-md border border-white/10 rounded-xl p-6 shadow-2xl">
-        <h2 className="text-xl font-bold text-white mb-6 border-b border-white/10 pb-4">Asset History: S-101</h2>
+    <div className="h-full p-8 flex flex-col min-h-0 bg-atw-bg">
+      <div className="flex items-center justify-between mb-8">
+        <div>
+          <h1 className="text-3xl font-bold text-white tracking-tight flex items-center gap-3">
+            <FileBox className="text-blue-500" size={32} />
+            Drawing Versions
+          </h1>
+          <p className="text-white/50 mt-2">Agent 8 monitors field usage in real-time to prevent outdated revision usage.</p>
+        </div>
         
-        {loading ? (
-          <div className="flex justify-center py-12"><div className="w-8 h-8 rounded-full border-2 border-t-atw-cyan animate-spin"></div></div>
-        ) : (
-          <div className="space-y-6">
-            {history.map((record, idx) => (
-              <div key={idx} className="flex gap-4">
-                <div className="flex flex-col items-center">
-                  <div className="w-8 h-8 rounded-full bg-atw-cyan/20 border border-atw-cyan flex items-center justify-center">
-                    <GitCommit size={16} className="text-atw-cyan" />
-                  </div>
-                  {idx !== history.length - 1 && <div className="w-px h-12 bg-gray-700 mt-2"></div>}
-                </div>
-                
-                <div className="flex-1 bg-gray-900/50 border border-gray-800 rounded-lg p-4">
-                  <div className="flex justify-between mb-2">
-                    <span className="text-white font-bold">Version {record.version}</span>
-                    <span className="text-gray-400 text-sm">{new Date(record.timestamp).toLocaleString()}</span>
-                  </div>
-                  <p className="text-gray-300">State transition: <span className="text-atw-cyan">{record.state}</span></p>
-                </div>
-              </div>
-            ))}
+        <div className="flex gap-4 items-center">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-white/30" size={16} />
+            <input 
+              type="text" 
+              placeholder="Search drawings..." 
+              className="bg-black/20 border border-white/10 rounded-lg pl-10 pr-4 py-2 text-sm text-white focus:outline-none focus:border-blue-500/50 transition-colors"
+            />
           </div>
-        )}
+          <button 
+            className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-semibold flex items-center gap-2 transition-all cursor-pointer shadow-lg shadow-blue-900/50"
+            onClick={() => toast('Opening file upload dialog...')}
+          >
+            <Upload size={16} /> Upload New Revision
+          </button>
+        </div>
+      </div>
+
+      <div className="flex-1 overflow-y-auto min-h-0">
+        <div className="bg-[#12121A] border border-white/10 rounded-xl overflow-hidden shadow-2xl">
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="bg-black/40 border-b border-white/10">
+                <th className="p-4 text-xs font-bold text-white/40 uppercase tracking-widest">Drawing No.</th>
+                <th className="p-4 text-xs font-bold text-white/40 uppercase tracking-widest">Discipline</th>
+                <th className="p-4 text-xs font-bold text-white/40 uppercase tracking-widest">Latest Approved</th>
+                <th className="p-4 text-xs font-bold text-white/40 uppercase tracking-widest">Approved By</th>
+                <th className="p-4 text-xs font-bold text-white/40 uppercase tracking-widest">Field Usage Detections</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-white/5">
+              {mockDrawings.map(dwg => (
+                <tr key={dwg.id} className="hover:bg-white/5 transition-colors group">
+                  <td className="p-4">
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded bg-blue-500/10 border border-blue-500/20 flex items-center justify-center">
+                        <FileBox size={14} className="text-blue-500" />
+                      </div>
+                      <span className="font-bold text-white tracking-wider">{dwg.number}</span>
+                    </div>
+                  </td>
+                  <td className="p-4 text-sm text-white/70">{dwg.discipline}</td>
+                  <td className="p-4">
+                    <div className="flex flex-col">
+                      <span className="font-mono text-atw-green font-bold text-lg">{dwg.latest_revision}</span>
+                      <span className="text-xs text-white/40">{dwg.latest_date}</span>
+                    </div>
+                  </td>
+                  <td className="p-4 text-sm text-white/60">{dwg.approved_by}</td>
+                  <td className="p-4">
+                    <div className="flex flex-col gap-2">
+                      {dwg.field_usage.map((usage, idx) => (
+                        <div key={idx} className="flex items-center gap-3">
+                          <span className="text-xs text-white/50 w-16">{usage.worker}</span>
+                          <span className="text-xs font-mono bg-black/40 border border-white/10 px-2 py-0.5 rounded">{usage.revision_scanned}</span>
+                          {usage.status === 'MISMATCH' ? (
+                            <span className="flex items-center gap-1 text-[10px] font-bold tracking-widest uppercase bg-atw-red/20 text-atw-red border border-atw-red/30 px-2 py-0.5 rounded-full">
+                              <FileWarning size={10} /> Mismatch
+                            </span>
+                          ) : (
+                            <span className="flex items-center gap-1 text-[10px] font-bold tracking-widest uppercase text-atw-green/70">
+                              <CheckCircle size={12} /> Compliant
+                            </span>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   ); 

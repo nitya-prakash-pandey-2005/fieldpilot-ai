@@ -2,13 +2,17 @@ import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, Animated, Dimensions, Vibration } from 'react-native';
 import { Camera as CameraIcon, CheckCircle, XCircle, AlertTriangle } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
+import { CameraView, useCameraPermissions } from 'expo-camera';
 import config from '../config';
+import { useTheme } from '../context/ThemeContext';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 export function ScanScreen() {
+  const { colors, apiBaseUrl } = useTheme();
   const [analyzing, setAnalyzing] = useState(false);
   const [result, setResult] = useState<any>(null);
+  const [permission, requestPermission] = useCameraPermissions();
   
   // Animation value for the scan line
   const scanAnim = useRef(new Animated.Value(0)).current;
@@ -36,17 +40,25 @@ export function ScanScreen() {
     setResult(null);
     
     try {
-      // Mocking the call to our Compliance API
-      const response = await fetch(`${config.API_BASE_URL}/api/v1/compliance/validate`, {
+      const baseUrl = apiBaseUrl || config.API_BASE_URL;
+      
+      // Generate a random measured value between 130 and 200
+      // Specification is 150 +- 10, so values between 140 and 160 will PASS
+      const randomMeasuredValue = Math.floor(Math.random() * 70) + 130;
+      
+      const response = await fetch(`${baseUrl}/api/v1/compliance/validate`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Bypass-Tunnel-Reminder': 'true'
+        },
         body: JSON.stringify({
           observation_id: "obs-mobile-1",
           asset_id: "rebar-A-042",
           zone_id: "A12",
           measurement: {
             parameter: "spacing",
-            measured_value: 190,
+            measured_value: randomMeasuredValue,
             unit: "mm",
             confidence: 0.98
           },
@@ -61,16 +73,26 @@ export function ScanScreen() {
         })
       });
       
-      const data = await response.json();
+      const text = await response.text();
+      let data;
+      try {
+        data = JSON.parse(text);
+      } catch (e) {
+        throw new Error(text.substring(0, 50));
+      }
+      
+      if (!response.ok) {
+        throw new Error(data.detail || `Server error: ${response.status}`);
+      }
       triggerResult(data);
     } catch (error) {
       console.error("Scan error", error);
-      // Fallback demo result
+      // Show actual network error instead of a fake violation in production
       triggerResult({
         result: "FAIL",
-        severity: "CRITICAL",
+        severity: "ERROR",
         explanation: {
-          worker_message: "Rebar spacing is 190mm. Specification requires 150mm ±10mm. Deviation is 30mm above maximum. STOP WORK."
+          worker_message: "Network request failed. Unable to reach the Compliance API. Please check your connection and API Base URL."
         }
       });
     } finally {
@@ -133,25 +155,44 @@ export function ScanScreen() {
     );
   };
 
+  if (!permission) {
+    return <View style={[styles.container, { backgroundColor: colors.bg, justifyContent: 'center' }]}><ActivityIndicator /></View>;
+  }
+
+  if (!permission.granted) {
+    return (
+      <View style={[styles.container, { backgroundColor: colors.bg, justifyContent: 'center', alignItems: 'center', padding: 20 }]}>
+        <Text style={{ color: colors.text, textAlign: 'center', marginBottom: 20, fontSize: 16 }}>We need your permission to show the camera</Text>
+        <TouchableOpacity style={[styles.ackButton, { backgroundColor: colors.primary }]} onPress={requestPermission}>
+          <Text style={[styles.ackButtonText, { color: '#FFF' }]}>GRANT PERMISSION</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
   return (
-    <View style={styles.container}>
-      {/* Mock Camera Viewfinder */}
-      <View style={styles.cameraView}>
-        <View style={styles.testModeBadge}>
-          <Text style={styles.testModeText}>TEST MODE: ON</Text>
+    <View style={[styles.container, { backgroundColor: colors.bg }]}>
+      {/* Real Camera Viewfinder */}
+      <View style={[styles.cameraView, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+        <CameraView style={StyleSheet.absoluteFillObject} facing="back" />
+        
+        <View style={[styles.testModeBadge, { backgroundColor: colors.warningSoft, borderColor: colors.warning }]}>
+          <Text style={[styles.testModeText, { color: colors.warning }]}>TEST MODE: ON</Text>
         </View>
         
         {/* Corner Brackets */}
-        <View style={[styles.corner, styles.tl]} />
-        <View style={[styles.corner, styles.tr]} />
-        <View style={[styles.corner, styles.bl]} />
-        <View style={[styles.corner, styles.br]} />
+        <View style={[styles.corner, styles.tl, { borderColor: colors.cyan }]} />
+        <View style={[styles.corner, styles.tr, { borderColor: colors.cyan }]} />
+        <View style={[styles.corner, styles.bl, { borderColor: colors.cyan }]} />
+        <View style={[styles.corner, styles.br, { borderColor: colors.cyan }]} />
 
         {/* Scanning Line Overlay */}
         <Animated.View 
           style={[
             styles.scanLine,
             {
+              backgroundColor: colors.cyan,
+              shadowColor: colors.cyan,
               transform: [{
                 translateY: scanAnim.interpolate({
                   inputRange: [0, 1],
@@ -163,14 +204,14 @@ export function ScanScreen() {
         />
         
         <View style={styles.targetBox}>
-          <Text style={styles.overlayTag}>ZONE A12</Text>
+          <Text style={[styles.overlayTag, { backgroundColor: colors.cyan, color: '#000' }]}>ALIGN OBJECT IN FRAME</Text>
         </View>
       </View>
 
       {/* Capture Button */}
       <View style={styles.controls}>
         <TouchableOpacity 
-          style={styles.captureButton} 
+          style={[styles.captureButton, { backgroundColor: colors.cyan }]} 
           onPress={handleScan}
           disabled={analyzing}
         >

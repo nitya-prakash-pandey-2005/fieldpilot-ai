@@ -2,10 +2,14 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, ScrollView } from 'react-native';
 import { Mic, Square, Volume2, ArrowLeft } from 'lucide-react-native';
 import { Audio } from 'expo-av';
+import * as FileSystem from 'expo-file-system/legacy';
+import config from '../config';
+import { useTheme } from '../context/ThemeContext';
 
 type VoiceState = 'IDLE' | 'RECORDING' | 'PROCESSING' | 'RESPONDING';
 
 export function VoiceScreen() {
+  const { colors, apiBaseUrl, geminiApiKey } = useTheme();
   const [state, setState] = useState<VoiceState>('IDLE');
   const [recording, setRecording] = useState<Audio.Recording | null>(null);
   
@@ -59,30 +63,40 @@ export function VoiceScreen() {
 
   const sendToBackend = async (uri: string) => {
     try {
-      const formData = new FormData();
-      formData.append('audio', {
-        uri,
-        type: 'audio/m4a',
-        name: 'voice_query.m4a'
-      } as any);
-      formData.append('project_id', 'P-001');
-      formData.append('zone_id', 'A12');
-      formData.append('worker_id', 'W-001');
-
-      // Note: Use your actual local IP address or tunnel URL for production
-      const apiUrl = process.env.EXPO_PUBLIC_API_URL || 'http://127.0.0.1:8000';
-      const response = await fetch(`${apiUrl}/api/v1/voice/query`, {
-        method: 'POST',
-        body: formData,
-        headers: {
-          'Accept': 'application/json',
-        },
+      const base64Audio = await FileSystem.readAsStringAsync(uri, {
+        encoding: 'base64',
       });
 
-      const data = await response.json();
+      const apiUrl = apiBaseUrl || config.API_BASE_URL;
+      const response = await fetch(`${apiUrl}/api/v1/voice/query_json`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Bypass-Tunnel-Reminder': 'true',
+          'X-Gemini-API-Key': geminiApiKey || '',
+        },
+        body: JSON.stringify({
+          audio_base64: base64Audio,
+          project_id: 'P-001',
+          zone_id: 'A12',
+          worker_id: 'W-001'
+        })
+      });
+
+      const text = await response.text();
+      let data;
+      try {
+        data = JSON.parse(text);
+      } catch (e) {
+        throw new Error(text.substring(0, 50) || 'Invalid server response');
+      }
       
-      setTranscript(data.transcript);
-      setResponseText(data.response_text);
+      if (!response.ok) {
+        throw new Error(data.detail || `Server error: ${response.status}`);
+      }
+      
+      setTranscript(data.transcript || 'Unknown query');
+      setResponseText(data.response_text || data.answer || 'No response from AI');
       setEvidence(data.evidence || []);
       
       setState('RESPONDING');
@@ -119,28 +133,28 @@ export function VoiceScreen() {
   };
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: colors.bg }]}>
       {state === 'IDLE' && (
         <View style={styles.centerContent}>
           <TouchableOpacity 
-            style={[styles.micButton, styles.micIdle]}
+            style={[styles.micButton, { backgroundColor: colors.surface }]}
             onPress={startRecording}
           >
-            <Mic color="#fff" size={40} />
+            <Mic color={colors.primary} size={40} />
           </TouchableOpacity>
-          <Text style={styles.title}>Tap and speak in any language</Text>
-          <Text style={styles.subtitle}>Supports English, Hindi, Arabic, Tamil, Telugu + 95 more</Text>
+          <Text style={[styles.title, { color: colors.text }]}>Tap and speak in any language</Text>
+          <Text style={[styles.subtitle, { color: colors.textSecondary }]}>Supports English, Hindi, Arabic, Tamil, Telugu + 95 more</Text>
         </View>
       )}
 
       {state === 'RECORDING' && (
         <View style={styles.centerContent}>
-          <View style={[styles.micButton, styles.micRecording]}>
-            <Mic color="#10b981" size={40} />
+          <View style={[styles.micButton, { backgroundColor: colors.successSoft, borderColor: colors.success, borderWidth: 2 }]}>
+            <Mic color={colors.success} size={40} />
           </View>
-          <Text style={styles.title}>Listening...</Text>
+          <Text style={[styles.title, { color: colors.text }]}>Listening...</Text>
           
-          <TouchableOpacity style={styles.stopButton} onPress={stopRecording}>
+          <TouchableOpacity style={[styles.stopButton, { backgroundColor: colors.error }]} onPress={stopRecording}>
             <Square color="#fff" size={20} fill="#fff" />
             <Text style={styles.stopText}>Stop</Text>
           </TouchableOpacity>
@@ -149,45 +163,45 @@ export function VoiceScreen() {
 
       {state === 'PROCESSING' && (
         <View style={styles.centerContent}>
-          <ActivityIndicator size="large" color="#3b82f6" style={{ transform: [{ scale: 1.5 }], marginBottom: 20 }} />
-          <Text style={styles.title}>Thinking...</Text>
+          <ActivityIndicator size="large" color={colors.primary} style={{ transform: [{ scale: 1.5 }], marginBottom: 20 }} />
+          <Text style={[styles.title, { color: colors.text }]}>Thinking...</Text>
         </View>
       )}
 
       {state === 'RESPONDING' && (
         <ScrollView style={styles.responseContainer} contentContainerStyle={{ paddingBottom: 40 }}>
-          <View style={styles.transcriptBox}>
-            <Text style={styles.transcriptLabel}>You said:</Text>
-            <Text style={styles.transcriptText}>"{transcript}"</Text>
+          <View style={[styles.transcriptBox, { backgroundColor: colors.surface }]}>
+            <Text style={[styles.transcriptLabel, { color: colors.textSecondary }]}>You said:</Text>
+            <Text style={[styles.transcriptText, { color: colors.text }]}>"{transcript}"</Text>
           </View>
 
-          <View style={styles.responseBox}>
+          <View style={[styles.responseBox, { backgroundColor: colors.primarySoft, borderColor: colors.primary }]}>
             <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
-              <Volume2 color="#3b82f6" size={24} style={{ marginRight: 8 }} />
-              <Text style={styles.responseLabel}>Project Memory:</Text>
+              <Volume2 color={colors.primary} size={24} style={{ marginRight: 8 }} />
+              <Text style={[styles.responseLabel, { color: colors.primary }]}>Project Memory:</Text>
             </View>
-            <Text style={styles.responseText}>{responseText}</Text>
+            <Text style={[styles.responseText, { color: colors.text }]}>{responseText}</Text>
           </View>
 
           {evidence && evidence.length > 0 && (
             <View style={styles.evidenceSection}>
-              <Text style={styles.evidenceTitle}>Sources:</Text>
+              <Text style={[styles.evidenceTitle, { color: colors.text }]}>Sources:</Text>
               {evidence.map((ev, i) => (
-                <View key={i} style={styles.evidenceCard}>
-                  <Text style={styles.evSource}>{ev.source_id}</Text>
-                  <Text style={styles.evExcerpt}>"{ev.excerpt}"</Text>
+                <View key={i} style={[styles.evidenceCard, { backgroundColor: colors.surface, borderLeftColor: colors.success }]}>
+                  <Text style={[styles.evSource, { color: colors.text }]}>{ev.source_id}</Text>
+                  <Text style={[styles.evExcerpt, { color: colors.textSecondary }]}>"{ev.excerpt}"</Text>
                   <View style={styles.evFooter}>
-                    <Text style={styles.evMeta}>{ev.date}</Text>
-                    {ev.approved_by && <Text style={styles.evMeta}>• {ev.approved_by}</Text>}
+                    <Text style={[styles.evMeta, { color: colors.textSecondary }]}>{ev.date}</Text>
+                    {ev.approved_by && <Text style={[styles.evMeta, { color: colors.textSecondary }]}>• {ev.approved_by}</Text>}
                   </View>
                 </View>
               ))}
             </View>
           )}
 
-          <TouchableOpacity style={styles.resetButton} onPress={reset}>
-            <ArrowLeft color="#fff" size={20} />
-            <Text style={styles.resetText}>Ask another question</Text>
+          <TouchableOpacity style={[styles.resetButton, { backgroundColor: colors.surfaceVariant }]} onPress={reset}>
+            <ArrowLeft color={colors.text} size={20} />
+            <Text style={[styles.resetText, { color: colors.text }]}>Ask another question</Text>
           </TouchableOpacity>
         </ScrollView>
       )}

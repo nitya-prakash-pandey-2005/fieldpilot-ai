@@ -1,54 +1,18 @@
 "use client";
 
 import { useEffect, useState } from 'react';
-import { BrainCircuit, AlertCircle, ArrowRight } from 'lucide-react';
+import { BrainCircuit, AlertCircle, ArrowRight, FileText } from 'lucide-react';
+import { toast } from 'sonner';
+import { mockRFIs } from '@/data/mockData';
 
 export function PredictedRFIPanel() {
-  const [data, setData] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
+  const [data, setData] = useState<any[]>(mockRFIs);
+  const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
-    // In MVP, we just fetch a prediction for Zone A12 to demonstrate the component
-    const fetchRFI = async () => {
-      try {
-        const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/v1/rfi/predict`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            project_id: "P-001",
-            zone_id: "A12",
-            current_activity: {
-              work_type: "rebar_installation",
-              drawing_refs: ["S-101-R5"],
-              scheduled_completion: "2024-12-01"
-            }
-          })
-        });
-        const result = await response.json();
-        if (result.status === "success") {
-          setData(result.prediction);
-        }
-      } catch (e) {
-        console.error("Failed to fetch Predicted RFI", e);
-        // Fallback demo data
-        setData({
-          zone_id: "A12",
-          predicted_rfis: [
-            {
-              rfi_category: "structural_interference",
-              probability: 0.87,
-              basis: "14 similar RFIs in comparable projects at lap splice junction.",
-              recommended_pre_action: "Clarify lap splice length before Zone A12 concrete pour resumes."
-            }
-          ]
-        });
-      } finally {
-        setLoading(false);
-      }
-    };
-    
-    fetchRFI();
-  }, []);
+  // Mock data loaded immediately
+  /*
+  useEffect(() => { ... }, []);
+  */
 
   return (
     <div className="h-full flex flex-col relative animate-fade-in" style={{ animationDelay: '350ms', animationFillMode: 'both' }}>
@@ -67,17 +31,17 @@ export function PredictedRFIPanel() {
           <div className="flex items-center justify-center h-32">
             <div className="w-6 h-6 border-2 border-atw-purple border-t-transparent rounded-full animate-spin"></div>
           </div>
-        ) : !data || !data.predicted_rfis ? (
+        ) : !data || data.length === 0 ? (
           <div className="text-white/40 text-sm text-center py-10">No predictive data available.</div>
         ) : (
           <div className="space-y-4">
-            {data.predicted_rfis.map((rfi: any, idx: number) => (
+            {data.map((rfi: any, idx: number) => (
               <div key={idx} className="bg-black/40 backdrop-blur-md rounded-lg p-4 border border-atw-purple/30 group hover:border-atw-purple/60 hover:shadow-[0_0_15px_rgba(123,97,255,0.2)] transition-all duration-300 relative overflow-hidden">
                 <div className="absolute top-0 left-0 w-1 h-full bg-atw-purple opacity-70"></div>
                 
                 <div className="flex items-start justify-between mb-3 ml-2">
                   <div className="flex items-center gap-2 text-white/90">
-                    <span className="font-semibold text-sm">Zone {data.zone_id} — {rfi.rfi_category.replace(/_/g, ' ').toUpperCase()}</span>
+                    <span className="font-semibold text-sm">Zone {rfi.zone_id} — {rfi.rfi_category.replace(/_/g, ' ').toUpperCase()}</span>
                   </div>
                   <div className="text-xs font-mono font-bold text-atw-purple bg-atw-purple/20 border border-atw-purple/30 px-2 py-0.5 rounded shadow-[0_0_8px_rgba(123,97,255,0.4)]">
                     {Math.round(rfi.probability * 100)}% PROB
@@ -95,10 +59,16 @@ export function PredictedRFIPanel() {
                 </div>
                 
                 <div className="flex gap-3 ml-2">
-                  <button className="flex-1 bg-white/5 hover:bg-white/10 text-white border border-white/10 text-xs py-2 rounded transition-colors tracking-wider font-medium">
+                  <button 
+                    onClick={() => toast('Fetching similar RFIs from database...', { icon: <FileText size={14} className="text-atw-cyan" /> })}
+                    className="flex-1 bg-white/5 hover:bg-white/10 text-white border border-white/10 text-xs py-2 rounded transition-colors tracking-wider font-medium cursor-pointer"
+                  >
                     View Similar RFIs
                   </button>
-                  <button className="flex-1 bg-atw-purple hover:bg-atw-purple/80 text-white text-xs py-2 rounded flex items-center justify-center gap-1 transition-colors tracking-wider font-semibold">
+                  <button 
+                    onClick={() => toast.success('Draft clarification RFI has been generated.')}
+                    className="flex-1 bg-atw-purple hover:bg-atw-purple/80 text-white text-xs py-2 rounded flex items-center justify-center gap-1 transition-colors tracking-wider font-semibold cursor-pointer"
+                  >
                     Draft Clarification <ArrowRight size={14} />
                   </button>
                 </div>

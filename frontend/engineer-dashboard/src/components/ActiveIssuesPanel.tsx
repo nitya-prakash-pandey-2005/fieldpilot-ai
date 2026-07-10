@@ -2,28 +2,18 @@
 
 import { useEffect, useState } from 'react';
 import { AlertTriangle, Clock, Camera, FileText } from 'lucide-react';
+import { toast } from 'sonner';
+import { mockIssues } from '@/data/mockData';
 
 export function ActiveIssuesPanel({ lastEvent }: { lastEvent?: any }) {
-  const [issues, setIssues] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [issues, setIssues] = useState<any[]>(mockIssues);
+  const [loading, setLoading] = useState(false);
 
-  const fetchIssues = async () => {
-    try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/v1/compliance/issues`);
-      const data = await response.json();
-      setIssues(data);
-    } catch (e) {
-      console.error("Failed to fetch issues", e);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchIssues();
-    const interval = setInterval(fetchIssues, 10000);
-    return () => clearInterval(interval);
-  }, []);
+  // Using mock data instead of polling for the frontend demo
+  /*
+  const fetchIssues = async () => { ... }
+  useEffect(() => { ... }, []);
+  */
 
   useEffect(() => {
     if (lastEvent && lastEvent.type === 'COMPLIANCE_FAIL') {
@@ -76,7 +66,7 @@ export function ActiveIssuesPanel({ lastEvent }: { lastEvent?: any }) {
                 </div>
                 
                 <div className="ml-2 mb-3 bg-atw-red/10 border border-atw-red/20 p-2.5 rounded text-sm text-atw-red/90 leading-relaxed">
-                  Deviation of {issue.deviation_pct ? Number(issue.deviation_pct).toFixed(1) : '?'}% detected. Measured: {issue.measured_value}, Expected: {issue.spec_value}. Immediate correction required.
+                  {issue.description || `Deviation of ${issue.deviation_pct ? Number(issue.deviation_pct).toFixed(1) : '?'}% detected. Measured: ${issue.measured_value}, Expected: ${issue.spec_value}. Immediate correction required.`}
                 </div>
                 
                 <div className="ml-2 flex items-center gap-4 text-xs text-white/50 mb-4">
@@ -86,10 +76,16 @@ export function ActiveIssuesPanel({ lastEvent }: { lastEvent?: any }) {
                 </div>
                 
                 <div className="ml-2 flex gap-3">
-                  <button className="flex-1 bg-atw-red/20 hover:bg-atw-red/40 text-atw-red border border-atw-red/30 text-xs py-2 rounded transition-colors uppercase tracking-wider font-semibold">
+                  <button 
+                    onClick={() => toast.error(`Issue in Zone ${issue.zone_id} escalated to Project Manager.`)}
+                    className="flex-1 bg-atw-red/20 hover:bg-atw-red/40 text-atw-red border border-atw-red/30 text-xs py-2 rounded transition-colors uppercase tracking-wider font-semibold cursor-pointer"
+                  >
                     Escalate
                   </button>
-                  <button className="flex-1 bg-atw-cyan hover:bg-atw-cyan/80 text-black text-xs py-2 rounded transition-colors uppercase tracking-wider font-semibold">
+                  <button 
+                    onClick={() => toast.success(`Issue in Zone ${issue.zone_id} marked as resolved.`)}
+                    className="flex-1 bg-atw-cyan hover:bg-atw-cyan/80 text-black text-xs py-2 rounded transition-colors uppercase tracking-wider font-semibold cursor-pointer"
+                  >
                     Resolve
                   </button>
                 </div>

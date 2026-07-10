@@ -66,7 +66,7 @@ export default function ExecutiveDashboard() {
             <ShieldCheck className="text-atw-purple" size={18} />
           </div>
           <div>
-            <h1 className="text-lg font-semibold tracking-wide">ASK THE WALL <span className="text-white/50 text-sm font-normal">| EXECUTIVE VIEW</span></h1>
+            <h1 className="text-lg font-semibold tracking-wide">FIELDPILOT AI <span className="text-white/50 text-sm font-normal">| EXECUTIVE VIEW</span></h1>
           </div>
         </div>
       </header>
