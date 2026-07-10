@@ -1,0 +1,63 @@
+@import "tailwindcss";
+@custom-variant dark (&:is(.dark *));
+
+@theme {
+  --color-atw-bg: var(--bg);
+  --color-atw-surface: var(--surface);
+  --color-atw-border: var(--border);
+  --color-atw-cyan: #00D4FF;
+  --color-atw-amber: #FFB300;
+  --color-atw-red: #FF3B3B;
+  --color-atw-green: #00C851;
+  --color-atw-purple: #7B61FF;
+  
+  --backdrop-blur-xs: 2px;
+  
+  --animate-pulse-slow: pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  --animate-scan-line: scanLine 2s linear infinite;
+  --animate-glow-red: glowRed 1.5s ease-in-out infinite;
+  --animate-glow-green: glowGreen 2s ease-in-out infinite;
+
+  @keyframes scanLine {
+    0% { transform: translateY(0); }
+    100% { transform: translateY(100vh); }
+  }
+
+  @keyframes glowRed {
+    0%, 100% { box-shadow: 0 0 10px rgba(255, 59, 59, 0.5); }
+    50% { box-shadow: 0 0 30px rgba(255, 59, 59, 0.9); }
+  }
+
+  @keyframes glowGreen {
+    0%, 100% { box-shadow: 0 0 10px rgba(0, 200, 81, 0.5); }
+    50% { box-shadow: 0 0 30px rgba(0, 200, 81, 0.9); }
+  }
+
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  --animate-fade-in: fadeIn 0.5s ease-out forwards;
+}
+
+:root {
+  --bg: #F0F4FF;
+  --surface: #FFFFFF;
+  --border: #E2E8F0;
+  --text-primary: #0A0A1A;
+  --text-secondary: #4A5568;
+}
+
+.dark {
+  --bg: #0A0A0F;
+  --surface: #12121A;
+  --border: #1E1E2E;
+  --text-primary: #F0F0FF;
+  --text-secondary: #A0A0B8;
+}
+
+body {
+  background-color: var(--bg);
+  color: var(--text-primary);
+  font-family: Arial, Helvetica, sans-serif;
+}
