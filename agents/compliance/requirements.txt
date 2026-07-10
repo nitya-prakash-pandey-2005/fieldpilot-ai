@@ -1,0 +1,2 @@
+# No external ML requirements for Agent 5, just standard libraries
+pydantic

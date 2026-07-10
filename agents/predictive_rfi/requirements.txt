@@ -1,0 +1,4 @@
+# LLM API and db clients
+httpx
+qdrant-client
+neo4j

@@ -1,0 +1,7 @@
+docling
+marker-pdf
+llama-parse
+qdrant-client
+sentence-transformers
+ezdxf
+python-dotenv
