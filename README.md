@@ -41,6 +41,8 @@ Site managers cannot see through 400 pairs of glasses at once. The web dashboard
 
 ## 🚀 How to Run the App Locally
 
+For a no-server dashboard deployment, see [GitHub Pages deployment](docs/GITHUB_PAGES.md).
+
 To run the complete system, you need to start the Backend (FastAPI), the Engineer Dashboard (Next.js), and the Executive Dashboard (Next.js) concurrently.
 
 ### 1. Backend (FastAPI)
