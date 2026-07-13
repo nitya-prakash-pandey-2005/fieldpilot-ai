@@ -12,7 +12,10 @@ async def get_predictions():
                 "title": "Concrete Delay Risk",
                 "description": "High probability of concrete pour delay due to rebar spacing issues in Zone A12.",
                 "probability": 0.85,
-                "impact": "High"
+                "impact": "High",
+                "confidence": 0.85,
+                "action": "Review",
+                "zone": "Zone A12"
             }
         ]
     }

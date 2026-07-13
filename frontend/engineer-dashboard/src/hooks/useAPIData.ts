@@ -9,7 +9,7 @@ export const useAPIData = (endpoint: string, fallback: any, options = {}) => {
     const API = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
     fetch(`${API}${endpoint}`, options)
       .then(r => { if (!r.ok) throw new Error(); return r.json(); })
-      .then(d => { setData(d); setIsLive(true); setLoading(false); })
+      .then(d => { setData(d.data !== undefined ? d.data : d); setIsLive(true); setLoading(false); })
       .catch(() => { setIsLive(false); setLoading(false); });
   }, [endpoint]);
   
