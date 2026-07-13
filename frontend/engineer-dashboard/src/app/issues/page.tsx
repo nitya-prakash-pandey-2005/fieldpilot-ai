@@ -46,7 +46,7 @@ export default function IssuesPage() {
   const handleExport = async () => {
     setExporting(true);
     try {
-      const res = await fetch(`http://localhost:8000/api/v1/projects/default-project/issues/export`, {
+      const res = await fetch(`/api/v1/projects/default-project/issues/export`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ severity_filter: activeFilter, format: 'pdf' })

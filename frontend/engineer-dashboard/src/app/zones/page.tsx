@@ -52,7 +52,7 @@ export default function ZonesPage() {
     setSelectedZoneIdForIssues(zoneId);
     setIssuesLoading(true);
     try {
-      const BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000';
+      const BASE = process.env.NEXT_PUBLIC_API_URL || "";
       const res = await fetch(`${BASE}/api/v1/zones/${zoneId}/issues`);
       const data = await res.json();
       setZoneIssues(data.issues || []);
@@ -67,7 +67,7 @@ export default function ZonesPage() {
   const handleAlertTeam = async (zoneId: string) => {
     setAlertLoadingId(zoneId);
     try {
-      const BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000';
+      const BASE = process.env.NEXT_PUBLIC_API_URL || "";
       const res = await fetch(`${BASE}/api/v1/zones/${zoneId}/alerts`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

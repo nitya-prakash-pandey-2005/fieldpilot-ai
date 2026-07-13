@@ -74,7 +74,7 @@ export default function VoiceSearchBar() {
       formData.append('zone_id', 'A12'); // Mock for dashboard context
       formData.append('worker_id', 'Admin-01');
 
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "";
       const res = await fetch(`${apiUrl}/api/v1/voice/query`, {
         method: 'POST',
         body: formData,

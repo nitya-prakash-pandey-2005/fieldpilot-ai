@@ -18,7 +18,7 @@ export function MemorySearch() {
     setHasSearched(true);
     
     try {
-      const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+      const API = process.env.NEXT_PUBLIC_API_URL || "";
       const res = await fetch(`${API}/api/v1/graph/query`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

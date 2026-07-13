@@ -4,7 +4,7 @@ export function useConnectionStatus() {
   const [status, setStatus] = useState<'live' | 'demo' | 'offline'>('offline');
 
   useEffect(() => {
-    const BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000';
+    const BASE = process.env.NEXT_PUBLIC_API_URL || "";
     const es = new EventSource(`${BASE}/api/v1/projects/default-project/zones/stream`);
     
     es.onopen = () => setStatus('live');

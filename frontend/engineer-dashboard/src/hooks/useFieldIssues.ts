@@ -50,7 +50,7 @@ export function useFieldIssues(projectId: string = 'default-project') {
   const fetchIssues = useCallback(async () => {
     try {
       setIsLoading(true);
-      const res = await fetch(`http://localhost:8000/api/v1/projects/${projectId}/issues`);
+      const res = await fetch(`/api/v1/projects/${projectId}/issues`);
       if (!res.ok) throw new Error('Failed to fetch issues');
       const data = await res.json();
       setIssues(data.issues);
@@ -72,7 +72,7 @@ export function useFieldIssues(projectId: string = 'default-project') {
   }, [fetchIssues]);
 
   useEffect(() => {
-    const eventSource = new EventSource(`http://localhost:8000/api/v1/projects/${projectId}/issues/stream`);
+    const eventSource = new EventSource(`/api/v1/projects/${projectId}/issues/stream`);
 
     eventSource.onmessage = (e) => {
       try {
@@ -121,7 +121,7 @@ export function useFieldIssues(projectId: string = 'default-project') {
 
   const resolveIssue = async (issueId: string, note: string) => {
     try {
-      const res = await fetch(`http://localhost:8000/api/v1/issues/${issueId}/resolve`, {
+      const res = await fetch(`/api/v1/issues/${issueId}/resolve`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ resolved_by_user_id: 'current_user', resolution_note: note })
@@ -143,7 +143,7 @@ export function useFieldIssues(projectId: string = 'default-project') {
 
   const escalateIssue = async (issueId: string, role: string, note: string) => {
     try {
-      const res = await fetch(`http://localhost:8000/api/v1/issues/${issueId}/escalate`, {
+      const res = await fetch(`/api/v1/issues/${issueId}/escalate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ escalated_by_user_id: 'current_user', escalate_to_role: role, note })

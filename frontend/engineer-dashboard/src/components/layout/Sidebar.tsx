@@ -15,7 +15,7 @@ export function Sidebar() {
 
   useEffect(() => {
     // Initial fetch of issues summary for the badge
-    fetch('http://localhost:8000/api/v1/projects/default-project/issues')
+    fetch('/api/v1/projects/default-project/issues')
       .then(res => res.json())
       .then(data => setActiveIssuesCount(data.summary.open))
       .catch(() => setActiveIssuesCount(null));
