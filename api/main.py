@@ -6,7 +6,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from routes import knowledge_graph, drawing_intelligence, vision, measurement, compliance, predictive_rfi, memory, version_control, notification, learning, health, voice, zones, issues
+from routes import knowledge_graph, drawing_intelligence, vision, measurement, compliance, predictive_rfi, memory, version_control, notification, learning, health, voice, zones, issues, planning
 import os
 
 from contextlib import asynccontextmanager
@@ -61,7 +61,7 @@ app = FastAPI(title="FieldPilot AI API Gateway", version="1.0.0", lifespan=lifes
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=os.getenv("CORS_ORIGINS", "http://localhost:3000,http://localhost:3001,http://localhost:8081,https://fieldpilot-ai-ovzd.vercel.app").split(","),
+    allow_origins=os.getenv("CORS_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000,http://localhost:3001,http://localhost:8081,https://fieldpilot-ai-ovzd.vercel.app").split(","),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -81,6 +81,7 @@ app.include_router(health.router)
 app.include_router(voice.router)
 app.include_router(zones.router)
 app.include_router(issues.router)
+app.include_router(planning.router)
 
 from datetime import datetime
 
