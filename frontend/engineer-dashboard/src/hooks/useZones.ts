@@ -36,7 +36,7 @@ export function useZones(projectId: string = "default-project") {
   const [connectionStatus, setConnectionStatus] = useState<'live' | 'demo' | 'offline'>('offline');
   
   useEffect(() => {
-    const BASE = process.env.NEXT_PUBLIC_API_URL || "";
+    const BASE = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
     
     // Initial fetch
     const fetchZones = async () => {

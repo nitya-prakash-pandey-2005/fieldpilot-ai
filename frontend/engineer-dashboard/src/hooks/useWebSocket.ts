@@ -8,7 +8,7 @@ export const useRealtimeUpdates = (projectId: string) => {
 
   const connect = useCallback(() => {
     // Determine WS URL based on environment variables or fallback to localhost
-    const wsUrl = process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:8000';
+    const wsUrl = process.env.NEXT_PUBLIC_WS_URL || 'ws://127.0.0.1:8000';
     const ws = new WebSocket(`${wsUrl}/ws/twin/${projectId}`);
     
     ws.onopen = () => {

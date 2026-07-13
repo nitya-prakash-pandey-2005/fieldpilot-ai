@@ -101,7 +101,7 @@ export function GlassesFeedPanel({
   };
 
   const connectGlasses = () => {
-    const ws = new WebSocket(`ws://localhost:8000/ws/glasses/WRK-001`);
+    const ws = new WebSocket(`ws://127.0.0.1:8000/ws/glasses/WRK-001`);
     ws.onopen = () => setGlassesConnected(true);
     ws.onclose = () => setGlassesConnected(false);
     ws.onmessage = (event) => {
