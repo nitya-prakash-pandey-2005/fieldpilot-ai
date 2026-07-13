@@ -22,7 +22,7 @@ export function SystemHealthPanel() {
   useEffect(() => {
     const fetchHealth = async () => {
       try {
-        const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || ""}/api/v1/health/agents`);
+        const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}/api/v1/health/agents`);
         const data = await response.json();
         if (data && data.agents && Object.keys(data.agents).length > 0) {
           setAgents(data.agents);
