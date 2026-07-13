@@ -23,7 +23,7 @@ class DatasetExporter:
         return {
             "export_type": "resolution",
             "messages": [
-                {"role": "system", "content": "You are ASK THE WALL AI Digital Foreman..."},
+                {"role": "system", "content": "You are FieldPilot AI Digital Foreman..."},
                 {"role": "user", "content": f"{row['asset_type'].capitalize()} {row['issue_type'].replace('_', ' ')} measured {row['measurement_at_detection']}mm in Zone {row['zone_id']}. Spec is {row['spec_value']}mm. What action should be taken?"},
                 {"role": "assistant", "content": f"FAIL. Deviation is {row['measurement_at_detection'] - row['spec_value']}mm. Stop work in Zone {row['zone_id']}. {resolution.get('action_taken')}."}
             ]
@@ -34,7 +34,7 @@ class DatasetExporter:
         return {
             "export_type": "prediction",
             "messages": [
-                {"role": "system", "content": "You are ASK THE WALL AI Digital Foreman..."},
+                {"role": "system", "content": "You are FieldPilot AI Digital Foreman..."},
                 {"role": "user", "content": f"Zone {row['zone_id']} starting {row['asset_type']} installation. What RFIs should we anticipate?"},
                 {"role": "assistant", "content": f"High probability of {row['issue_type'].replace('_', ' ')} based on previous resolved incidents in this zone. {resolution.get('resolution_notes', '')}"}
             ]
@@ -45,7 +45,7 @@ class DatasetExporter:
         return {
             "export_type": "memory",
             "messages": [
-                {"role": "system", "content": "You are ASK THE WALL AI Digital Foreman..."},
+                {"role": "system", "content": "You are FieldPilot AI Digital Foreman..."},
                 {"role": "user", "content": f"Has Zone {row['zone_id']} had {row['asset_type']} issues before?"},
                 {"role": "assistant", "content": f"Yes. Incident {row['incident_id']}: {row['issue_type'].replace('_', ' ')} corrected from {row['measurement_at_detection']}mm to {row['spec_value']}mm. Resolved by {resolution.get('resolved_by')} in {resolution.get('time_to_resolve_hours')} hours. Notes: {resolution.get('resolution_notes')}"}
             ]

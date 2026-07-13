@@ -5,9 +5,8 @@ import os
 
 class VoiceAgent:
     def __init__(self):
-        self.client = groq.Groq(
-            api_key=os.getenv("GROQ_API_KEY")
-        )
+        self.api_key = os.environ.get("GROQ_API_KEY") or "dummy-key-for-demo"
+        self.client = groq.Groq(api_key=self.api_key)
     
     async def transcribe(
         self, 

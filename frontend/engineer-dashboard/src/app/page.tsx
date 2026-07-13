@@ -1,71 +1,72 @@
 "use client";
 
-import { PredictedRFIPanel } from '@/components/PredictedRFIPanel';
-import { ActiveIssuesPanel } from '@/components/ActiveIssuesPanel';
-import LiveSiteMap from '@/components/LiveSiteMap';
-import KPIBar from '@/components/KPIBar';
-import VoiceSearchBar from '@/components/VoiceSearchBar';
-import { ThemeToggle } from '@/components/ThemeToggle';
-import { Activity } from 'lucide-react';
-import { useRealtimeUpdates } from '@/hooks/useWebSocket';
+import React from 'react';
+import { KPIBar } from '@/components/dashboard/KPIBar';
+import { LiveSiteMap } from '@/components/dashboard/LiveSiteMap';
+import { ActiveIssuesPanel } from '@/components/dashboard/ActiveIssuesPanel';
+import { PredictedRFIPanel } from '@/components/dashboard/PredictedRFIPanel';
 
-export default function Dashboard() {
-  const { connected, lastEvent } = useRealtimeUpdates('P-001');
+export default function Home() {
+  const [obsIndex, setObsIndex] = React.useState(0);
+  
+  React.useEffect(() => {
+    // Cycle the observation every 10 seconds for demo purposes
+    const interval = setInterval(() => {
+      setObsIndex(prev => prev === 0 ? 1 : 0);
+    }, 10000);
+    return () => clearInterval(interval);
+  }, []);
 
   return (
-    <div className="flex-1 flex flex-col min-h-screen bg-atw-bg text-white">
-      {/* Top Header */}
-      <header className="h-16 border-b border-atw-border bg-atw-surface/50 backdrop-blur-md flex items-center justify-between px-6 sticky top-0 z-10">
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded bg-atw-cyan/20 flex items-center justify-center border border-atw-cyan/50">
-            <Activity className="text-atw-cyan" size={18} />
-          </div>
-          <div>
-            <h1 className="text-lg font-semibold tracking-wide">FIELDPILOT AI <span className="text-white/50 text-sm font-normal">| COMMAND CENTER</span></h1>
+    <div className="flex flex-col h-full gap-4 relative animate-fade-in">
+      <KPIBar />
+      
+      {/* LAST AI OBSERVATION BANNER */}
+      <div className="w-full h-[40px] bg-[var(--bg-surface)]/80 backdrop-blur-md border border-[var(--border-accent)] rounded-lg flex items-center px-4 shadow-lg overflow-hidden relative">
+        <div className="absolute left-0 top-0 bottom-0 w-1 bg-[var(--cyan)] shadow-[0_0_8px_var(--cyan)] animate-pulse" />
+        
+        {obsIndex === 0 ? (
+          <p className="text-[11px] font-mono text-[var(--text-primary)] w-full truncate flex items-center gap-2">
+            <span className="text-[14px]">🥽</span> 
+            <span className="font-bold text-[var(--cyan)] tracking-wider">ZONE A12</span> 
+            <span className="text-[var(--text-muted)] mx-1">·</span>
+            Rebar spacing deviation detected 
+            <span className="text-[var(--text-muted)] mx-1">·</span>
+            <span className="text-[var(--fail)] font-bold">+30mm above spec</span> 
+            <span className="text-[var(--text-muted)] mx-1">·</span>
+            Worker: Ali Hassan
+            <span className="text-[var(--text-muted)] mx-1">·</span>
+            Agent 7 retrieved 3 relevant specs
+            <span className="text-[var(--text-muted)] mx-1">·</span>
+            WhatsApp dispatched to Engineer Chen
+            <span className="text-[var(--text-muted)] mx-1">·</span>
+            <span className="text-[var(--text-muted)]">2 minutes ago</span>
+          </p>
+        ) : (
+          <p className="text-[11px] font-mono text-[var(--pass)] w-full truncate flex items-center gap-2">
+             <span className="w-2 h-2 rounded-full bg-[var(--pass)] animate-pulse shadow-[0_0_8px_var(--pass)]" />
+             All zones nominal — Glasses feed monitoring 4 workers
+          </p>
+        )}
+      </div>
+      
+      <div className="grid grid-cols-1 lg:grid-cols-3 xl:grid-cols-4 gap-4 flex-1 min-h-[500px]">
+        {/* Main Map Area */}
+        <div className="lg:col-span-2 xl:col-span-2 flex flex-col xl:border-r border-[var(--border-subtle)] xl:pr-4">
+          <LiveSiteMap />
+        </div>
+        
+        {/* Right Sidebar Columns */}
+        <div className="flex flex-col gap-4 xl:col-span-1 xl:border-r border-[var(--border-subtle)] xl:pr-4">
+          <div className="flex-1 min-h-[250px]">
+            <ActiveIssuesPanel />
           </div>
         </div>
         
-        <div className="flex-1 flex justify-center">
-          <VoiceSearchBar />
-        </div>
-        
-        <div className="flex gap-4 items-center">
-          <ThemeToggle />
-          <div className={`border px-3 py-1.5 rounded-lg flex items-center gap-2 transition-colors duration-300 ${connected ? 'bg-atw-green/10 border-atw-green/20' : 'bg-atw-amber/10 border-atw-amber/20'}`}>
-            <div className={`w-2 h-2 rounded-full ${connected ? 'bg-atw-green animate-pulse' : 'bg-atw-amber'}`}></div>
-            <span className={`text-sm font-medium tracking-wide ${connected ? 'text-atw-green' : 'text-atw-amber'}`}>
-              {connected ? 'System is live' : 'Reconnecting...'}
-            </span>
+        <div className="flex flex-col gap-4 xl:col-span-1">
+          <div className="flex-1 min-h-[250px]">
+            <PredictedRFIPanel />
           </div>
-        </div>
-      </header>
-
-      {/* Main Content Area */}
-      <div className="flex-1 p-6 overflow-y-auto min-h-0">
-        
-        {/* KPI Row (Phase 1 wiring) */}
-        <div className="mb-6">
-          <KPIBar />
-        </div>
-
-        {/* Dashboard Grid */}
-        <div className="grid grid-cols-12 gap-6 h-[650px]">
-          
-          {/* Live Site Map */}
-          <div className="col-span-7 h-full flex flex-col relative">
-            <LiveSiteMap lastEvent={lastEvent} />
-          </div>
-
-          {/* Side Panels */}
-          <div className="col-span-5 flex flex-col gap-6 h-full">
-            <div className="flex-1 min-h-0 bg-atw-surface/40 backdrop-blur-md border border-white/10 rounded-xl overflow-hidden shadow-2xl">
-              <ActiveIssuesPanel lastEvent={lastEvent} />
-            </div>
-            <div className="flex-1 min-h-0 bg-atw-surface/40 backdrop-blur-md border border-white/10 rounded-xl overflow-hidden shadow-2xl">
-              <PredictedRFIPanel />
-            </div>
-          </div>
-          
         </div>
       </div>
     </div>

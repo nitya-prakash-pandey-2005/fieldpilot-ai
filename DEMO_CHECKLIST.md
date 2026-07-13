@@ -1,4 +1,4 @@
-# ASK THE WALL - DEMO DAY CHECKLIST
+# FIELDPILOT AI - DEMO DAY CHECKLIST
 
 ## Pre-demo (30 minutes before)
 - [ ] `docker compose up` — verify all services are green

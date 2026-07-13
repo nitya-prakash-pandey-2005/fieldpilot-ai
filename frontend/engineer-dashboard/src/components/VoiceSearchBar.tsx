@@ -53,7 +53,7 @@ export default function VoiceSearchBar() {
       if (recognitionRef.current) recognitionRef.current.start();
       setState('RECORDING');
     } catch (err) {
-      console.error("Microphone access denied", err);
+      console.warn("Microphone access denied");
     }
   };
 
@@ -91,7 +91,7 @@ export default function VoiceSearchBar() {
         playTTS(data.audio_base64);
       }
     } catch (err) {
-      console.error("Backend voice query failed", err);
+      console.warn("Backend voice query failed");
       setState('IDLE');
     }
   };
@@ -116,7 +116,7 @@ export default function VoiceSearchBar() {
       source.connect(audioCtx.destination);
       source.start();
     } catch (e) {
-      console.error("Error playing TTS", e);
+      console.warn("Error playing TTS");
     }
   };
 

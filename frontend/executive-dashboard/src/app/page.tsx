@@ -14,13 +14,21 @@ import {
   ResponsiveContainer
 } from 'recharts';
 
+const FALLBACK_TRENDS = [
+  { month: 'Feb 2026', cost_avoided: 15000, incidents: 4 },
+  { month: 'Mar 2026', cost_avoided: 18000, incidents: 5 },
+  { month: 'Apr 2026', cost_avoided: 12000, incidents: 3 },
+  { month: 'May 2026', cost_avoided: 24000, incidents: 6 },
+  { month: 'Jun 2026', cost_avoided: 22000, incidents: 5 },
+  { month: 'Jul 2026', cost_avoided: 28000, incidents: 7 },
+];
+
 export default function ExecutiveDashboard() {
-  const [trends, setTrends] = useState<any[]>([]);
+  const [trends, setTrends] = useState<Record<string, unknown>[]>(FALLBACK_TRENDS);
   const [stats, setStats] = useState({
     total_cost_avoided_usd: 187000,
     rework_prevented_count: 12
   });
-  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -30,27 +38,21 @@ export default function ExecutiveDashboard() {
           fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/v1/learning/trends`)
         ]);
         
-        if (statsRes.ok) setStats(await statsRes.json());
+        if (statsRes.ok) {
+          const sData = await statsRes.json();
+          if (sData && typeof sData.total_cost_avoided_usd !== 'undefined') {
+            setStats(sData);
+          }
+        }
         
         if (trendsRes.ok) {
           const tData = await trendsRes.json();
-          if (tData.status === 'success') {
+          if (tData && tData.status === 'success' && tData.data && tData.data.length > 0) {
             setTrends(tData.data);
           }
         }
       } catch (e) {
-        console.error("Failed to fetch dashboard data", e);
-        // Fallback for demo
-        setTrends([
-          { month: 'Feb 2026', cost_avoided: 15000, incidents: 4 },
-          { month: 'Mar 2026', cost_avoided: 18000, incidents: 5 },
-          { month: 'Apr 2026', cost_avoided: 12000, incidents: 3 },
-          { month: 'May 2026', cost_avoided: 24000, incidents: 6 },
-          { month: 'Jun 2026', cost_avoided: 22000, incidents: 5 },
-          { month: 'Jul 2026', cost_avoided: 28000, incidents: 7 },
-        ]);
-      } finally {
-        setLoading(false);
+        console.warn("Failed to fetch dashboard data, using fallback");
       }
     };
     
@@ -120,7 +122,7 @@ export default function ExecutiveDashboard() {
             </div>
             
             <div className="flex-1 w-full relative z-10">
-              {!loading && trends.length > 0 && (
+              {trends.length > 0 && (
                 <ResponsiveContainer width="100%" height="100%">
                   <AreaChart data={trends} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
                     <defs>

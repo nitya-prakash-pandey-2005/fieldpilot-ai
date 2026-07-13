@@ -6,7 +6,7 @@ router = APIRouter(prefix="/api/v1/health", tags=["System Health"])
 @router.get("/agents")
 async def get_agents_health():
     """
-    Returns the live status of all 10 autonomous agents in the ASK THE WALL system.
+    Returns the live status of all 10 autonomous agents in the FieldPilot AI system.
     """
     agents_map = {
         "vision": "operational",

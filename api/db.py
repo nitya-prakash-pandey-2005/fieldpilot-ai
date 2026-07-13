@@ -27,3 +27,17 @@ except Exception as e:
 
 def get_qdrant_client():
     return qdrant_client
+
+# SQLAlchemy Setup (SQLite for local dev)
+from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
+
+SQLALCHEMY_DATABASE_URL = "sqlite+aiosqlite:///./fieldpilot.db"
+
+engine = create_async_engine(
+    SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False}
+)
+async_session = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+
+async def get_db():
+    async with async_session() as session:
+        yield session

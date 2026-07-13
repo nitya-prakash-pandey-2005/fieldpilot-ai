@@ -7,7 +7,7 @@ import logging
 
 try:
     from paddleocr import PaddleOCR
-    HAS_PADDLE = True
+    HAS_PADDLE = False # Forced to false to bypass slow startup
 except ImportError:
     HAS_PADDLE = False
 

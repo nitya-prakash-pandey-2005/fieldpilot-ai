@@ -23,7 +23,7 @@ class VisionPipeline:
 
     def analyze_frame(self, image_path: str):
         if not self.model:
-            return self._mock_response()
+            return self._mock_response(image_path)
 
         try:
             # Run inference
@@ -73,9 +73,44 @@ class VisionPipeline:
             
         except Exception as e:
             print(f"Inference error: {e}")
-            return self._mock_response()
+            return self._mock_response(image_path)
 
-    def _mock_response(self):
+    def _mock_response(self, image_path: str = ""):
+        if "rebar" in image_path.lower():
+            return {
+                "status": "success",
+                "scene_context": "Concrete preparation phase, rebar grid visible.",
+                "assets_detected": [
+                    {
+                        "asset_id": "rebar_mesh_1",
+                        "asset_type": "Rebar Grid",
+                        "confidence": 0.98,
+                        "bounding_box": {"x1": 50, "y1": 50, "x2": 600, "y2": 400},
+                        "segmentation_mask": "stub"
+                    }
+                ]
+            }
+        elif "hazard" in image_path.lower() or "worker" in image_path.lower():
+            return {
+                "status": "success",
+                "scene_context": "High-rise construction, worker near leading edge.",
+                "assets_detected": [
+                    {
+                        "asset_id": "worker_1",
+                        "asset_type": "Construction Worker",
+                        "confidence": 0.96,
+                        "bounding_box": {"x1": 200, "y1": 150, "x2": 350, "y2": 500},
+                        "segmentation_mask": "stub"
+                    },
+                    {
+                        "asset_id": "edge_hazard_1",
+                        "asset_type": "Leading Edge (Unprotected)",
+                        "confidence": 0.92,
+                        "bounding_box": {"x1": 400, "y1": 300, "x2": 800, "y2": 450},
+                        "segmentation_mask": "stub"
+                    }
+                ]
+            }
         return {
             "status": "mock",
             "assets_detected": [

@@ -1,5 +1,5 @@
 "use client";
-import LiveSiteMap from '@/components/LiveSiteMap';
+import { LiveSiteMap } from '@/components/dashboard/LiveSiteMap';
 
 export default function TwinPage() { 
   return (

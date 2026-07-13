@@ -1,6 +1,6 @@
 def setup_constraints(session):
     """
-    Initializes the required constraints for the ASK THE WALL ontology.
+    Initializes the required constraints for the FieldPilot AI ontology.
     """
     constraints = [
         "CREATE CONSTRAINT project_id IF NOT EXISTS FOR (p:Project) REQUIRE p.id IS UNIQUE",

@@ -10,10 +10,7 @@ from agents.knowledge_graph.queries import get_zone_risk_score
 from agents.knowledge_graph.schema import setup_constraints
 
 # Setup constraints on module load if DB is up
-session = get_neo4j_session()
-if session:
-    setup_constraints(session)
-    session.close()
+# Session will be obtained within endpoints
 
 router = APIRouter(prefix="/api/v1/graph", tags=["Knowledge Graph (Agent 4)"])
 

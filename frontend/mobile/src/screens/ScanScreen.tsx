@@ -13,6 +13,7 @@ export function ScanScreen() {
   const [analyzing, setAnalyzing] = useState(false);
   const [result, setResult] = useState<any>(null);
   const [permission, requestPermission] = useCameraPermissions();
+  const cameraRef = useRef<any>(null);
   
   // Animation value for the scan line
   const scanAnim = useRef(new Animated.Value(0)).current;
@@ -42,34 +43,23 @@ export function ScanScreen() {
     try {
       const baseUrl = apiBaseUrl || config.API_BASE_URL;
       
-      // Generate a random measured value between 130 and 200
-      // Specification is 150 +- 10, so values between 140 and 160 will PASS
-      const randomMeasuredValue = Math.floor(Math.random() * 70) + 130;
+      let base64Image = "";
+      if (cameraRef.current) {
+          const photo = await cameraRef.current.takePictureAsync({ base64: true, quality: 0.3 });
+          base64Image = photo.base64;
+      }
       
-      const response = await fetch(`${baseUrl}/api/v1/compliance/validate`, {
+      const response = await fetch(`${baseUrl}/api/v1/vision/understand`, {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
           'Bypass-Tunnel-Reminder': 'true'
         },
         body: JSON.stringify({
-          observation_id: "obs-mobile-1",
-          asset_id: "rebar-A-042",
+          image: base64Image,
           zone_id: "A12",
-          measurement: {
-            parameter: "spacing",
-            measured_value: randomMeasuredValue,
-            unit: "mm",
-            confidence: 0.98
-          },
-          specification: {
-            spec_id: "spec-789",
-            expected_value: 150,
-            tolerance_min: 140,
-            tolerance_max: 160,
-            unit: "mm",
-            standard_ref: "ACI 318-19"
-          }
+          language: "en",
+          project_id: "P-001"
         })
       });
       
@@ -84,15 +74,26 @@ export function ScanScreen() {
       if (!response.ok) {
         throw new Error(data.detail || `Server error: ${response.status}`);
       }
-      triggerResult(data);
-    } catch (error) {
+      
+      // Map VLM response format to our overlay UI format
+      const isPass = data.scene?.urgency === "low";
+      const isCritical = data.scene?.urgency === "critical";
+      
+      triggerResult({
+        result: isPass ? "PASS" : "FAIL",
+        severity: isCritical ? "CRITICAL" : "HIGH",
+        explanation: {
+          worker_message: data.scene?.spoken_response || data.scene?.scene_description || "Analyzed successfully."
+        }
+      });
+      
+    } catch (error: any) {
       console.error("Scan error", error);
-      // Show actual network error instead of a fake violation in production
       triggerResult({
         result: "FAIL",
         severity: "ERROR",
         explanation: {
-          worker_message: "Network request failed. Unable to reach the Compliance API. Please check your connection and API Base URL."
+          worker_message: `Network request failed: ${error.message}`
         }
       });
     } finally {
@@ -174,7 +175,7 @@ export function ScanScreen() {
     <View style={[styles.container, { backgroundColor: colors.bg }]}>
       {/* Real Camera Viewfinder */}
       <View style={[styles.cameraView, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-        <CameraView style={StyleSheet.absoluteFillObject} facing="back" />
+        <CameraView ref={cameraRef} style={StyleSheet.absoluteFillObject} facing="back" />
         
         <View style={[styles.testModeBadge, { backgroundColor: colors.warningSoft, borderColor: colors.warning }]}>
           <Text style={[styles.testModeText, { color: colors.warning }]}>TEST MODE: ON</Text>
