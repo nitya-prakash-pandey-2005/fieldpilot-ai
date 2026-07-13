@@ -1,0 +1,43 @@
+name: Deploy engineer dashboard to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: github-pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: frontend/engineer-dashboard/package-lock.json
+      - id: pages
+        uses: actions/configure-pages@v5
+      - name: Build static dashboard
+        working-directory: frontend/engineer-dashboard
+        env:
+          NEXT_PUBLIC_BASE_PATH: ${{ steps.pages.outputs.base_path }}
+        run: |
+          npm ci --legacy-peer-deps
+          npm run build
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: frontend/engineer-dashboard/out
+      - id: deployment
+        uses: actions/deploy-pages@v4

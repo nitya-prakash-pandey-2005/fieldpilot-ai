@@ -47,7 +47,14 @@ export default function IssueDetailPanel({ issue, isOpen, onClose, onResolve, on
         <div className="p-6 border-b border-white/5 flex items-start justify-between sticky top-0 bg-[#0f0f15]/95 backdrop-blur z-10">
           <div>
             <div className="flex items-center gap-3 mb-2">
-              <span className={`text-xs font-bold px-2.5 py-1 rounded-full uppercase tracking-wider ${severityData.bg} ${severityData.text} ${severityData.border} border`}>
+              <span
+                className="text-xs font-bold px-2.5 py-1 rounded-full uppercase tracking-wider border"
+                style={{
+                  backgroundColor: severityData.badge_bg,
+                  color: severityData.badge_text,
+                  borderColor: severityData.badge_border,
+                }}
+              >
                 {issue.severity}
               </span>
               <span className="text-white/40 text-sm font-mono">{issue.id}</span>
