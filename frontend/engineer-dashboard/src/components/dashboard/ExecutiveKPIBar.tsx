@@ -17,7 +17,7 @@ export function ExecutiveKPIBar() {
   useEffect(() => {
     const fetchStats = async () => {
       try {
-        const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || ""}/api/v1/learning/stats`);
+        const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}/api/v1/learning/stats`);
         if (res.ok) {
           const stats = await res.json();
           setData(prev => ({
