@@ -30,7 +30,7 @@ export function ObservationPanel({ scanResult }: { scanResult: any }) {
   const handleNotify = async () => {
     if (!scanResult) return;
     try {
-      await fetch(`${process.env.NEXT_PUBLIC_API_URL || ""}/api/v1/notification/dispatch', { 
+      await fetch(`${process.env.NEXT_PUBLIC_API_URL || ""}/api/v1/notification/dispatch`, { 
         method: 'POST', 
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
