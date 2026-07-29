@@ -26,6 +26,7 @@ from agents.vision.ppe_detector   import PpeDetector
 from agents.vision.pose_estimator import PoseEstimator
 from agents.vision.hazard_analyzer import HazardAnalyzer
 from agents.vision.attention_tracker import AttentionStateMachine
+from agents.vision.equipment_detector import EquipmentDetector
 
 
 class VisionPipeline:
@@ -39,6 +40,7 @@ class VisionPipeline:
         self.yolo    = None
         self.ppe     = PpeDetector()
         self.pose    = PoseEstimator()
+        self.equipment = EquipmentDetector()
         self.hazard  = HazardAnalyzer()
         # One tracker per pipeline instance, reused every frame — the Day-4
         # dwell-time state machine needs its per-track_id history to persist
@@ -178,12 +180,16 @@ class VisionPipeline:
                 elif i < len(pose_results):
                     p["pose"] = pose_results[i]
 
+            # ── Step 3.5: Heavy equipment detection (struck-by hazard) ──
+            equipment_detections = self.equipment.detect(frame)
+
             # ── Step 4: Hazard assessment ────────────────────────────────
             assessments = self.hazard.analyze_frame(
                 zone_id=self.zone_id,
                 persons=persons,
                 pose_results=pose_results,
                 attention_tracker=self.attention_tracker,
+                equipment=equipment_detections,
             )
             zone_summary = self.hazard.aggregate_zone_risk(assessments)
 
@@ -201,20 +207,27 @@ class VisionPipeline:
                         "fire_fall"      : a.fire_fall_alert,
                         "fire_ppe"       : a.fire_ppe_alert,
                         "attention_state": a.attention_state,
+                        "struck_by_risk" : a.struck_by_risk,
+                        "nearest_equipment_type": a.nearest_equipment_type,
                     }
 
             # ── Build annotated frame ────────────────────────────────────
-            annotated = self._annotate(frame.copy(), persons, other_items, zone_summary)
+            annotated = self._annotate(frame.copy(), persons, other_items, zone_summary, equipment_detections)
 
             return {
                 "status"           : "success",
                 "scene_context"    : "auto_detected",
                 "assets_detected"  : persons + other_items,
+                "equipment_detected": equipment_detections,
                 "compliance_checks": self._build_compliance_checks(persons),
                 "zone_summary"     : zone_summary,
                 "fall_events"      : [
                     p["asset_id"] for p in persons
                     if p.get("hazard", {}).get("fall_detected")
+                ],
+                "struck_by_events" : [
+                    p["asset_id"] for p in persons
+                    if p.get("hazard", {}).get("struck_by_risk")
                 ],
                 "annotated_frame"  : annotated,   # ndarray, for live streaming
             }
@@ -229,7 +242,7 @@ class VisionPipeline:
     # ------------------------------------------------------------------
 
     def _annotate(self, frame: np.ndarray, persons: list, others: list,
-                  zone_summary: dict) -> np.ndarray:
+                  zone_summary: dict, equipment: list = None) -> np.ndarray:
         """Draw AR-style bounding boxes, PPE badges, fall alerts on frame."""
         h, w = frame.shape[:2]
 
@@ -273,6 +286,12 @@ class VisionPipeline:
                 cv2.putText(frame, "⚠ FALL", (x1, y1 + 30),
                             cv2.FONT_HERSHEY_DUPLEX, 0.9, (0, 0, 255), 2)
 
+            # Struck-by alert overlay
+            if hazard.get("struck_by_risk"):
+                cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 140, 255), 4)
+                cv2.putText(frame, "⚠ STRUCK-BY RISK", (x1, y1 + 50),
+                            cv2.FONT_HERSHEY_DUPLEX, 0.7, (0, 140, 255), 2)
+
             # Pose skeleton — draw available keypoints
             pose = p.get("pose", {})
             if pose and pose.get("keypoints"):
@@ -281,6 +300,16 @@ class VisionPipeline:
                     kx, ky, kconf = kp["x"], kp["y"], kp["confidence"]
                     if kconf > 0.3 and kx > 0 and ky > 0:
                         cv2.circle(frame, (int(kx), int(ky)), 3, (0, 255, 255), -1)
+
+        # Heavy equipment (forklifts, etc.) — struck-by hazard source
+        for eq in (equipment or []):
+            bbox = eq.get("bounding_box", {})
+            x1, y1 = int(bbox.get("x1", 0)), int(bbox.get("y1", 0))
+            x2, y2 = int(bbox.get("x2", w)), int(bbox.get("y2", h))
+            cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 140, 255), 2)
+            cv2.putText(frame, f"🚜 {eq.get('equipment_type', '?')}",
+                        (x1, max(y1 - 5, 10)),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.45, (0, 140, 255), 1)
 
         # Other objects (rebar, tools, etc.)
         for obj in others:

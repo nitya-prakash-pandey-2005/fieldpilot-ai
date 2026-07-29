@@ -1,15 +1,16 @@
 import os
 import sys
+import json
 import uuid
 import random
 import asyncio
-import asyncpg
 from neo4j import GraphDatabase
 from qdrant_client import QdrantClient
 from qdrant_client.http.models import Distance, VectorParams, PointStruct
 from sentence_transformers import SentenceTransformer
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../")))
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../api")))
 
 def seed_neo4j():
     uri = os.getenv("NEO4J_URI", "bolt://localhost:7687")
@@ -33,16 +34,18 @@ def seed_neo4j():
             session.run("MERGE (a:Asset {id: 'Wall-East', type: 'wall', zone_id: 'C7'})")
             
             demo_drawings = [
-                {"number": "S-101", "revision": "R5", "approved_date": "2024-11-02", "key_changes": "Rebar spacing in Zone A12 changed from 200mm to 150mm"},
-                {"number": "S-102", "revision": "R3", "approved_date": "2024-10-15", "key_changes": "Column C4 lap splice clarified"},
-                {"number": "M-045", "revision": "R2", "approved_date": "2024-09-20", "key_changes": "East wall conduit routing approved"}
+                {"number": "S-101", "revision": "R5", "approved_date": "2024-11-02", "key_changes": "Rebar spacing in Zone A12 changed from 200mm to 150mm", "discipline": "Structural", "approved_by": "David Park, SE"},
+                {"number": "S-102", "revision": "R3", "approved_date": "2024-10-15", "key_changes": "Column C4 lap splice clarified", "discipline": "Structural", "approved_by": "David Park, SE"},
+                {"number": "M-045", "revision": "R2", "approved_date": "2024-09-20", "key_changes": "East wall conduit routing approved", "discipline": "MEP", "approved_by": "Sarah Chen, PE"}
             ]
             for dwg in demo_drawings:
                 query = """
                 MERGE (d:Drawing {number: $number})
                 SET d.revision = $revision,
                     d.approved_date = $approved_date,
-                    d.key_changes = $key_changes
+                    d.key_changes = $key_changes,
+                    d.discipline = $discipline,
+                    d.approved_by = $approved_by
                 """
                 session.run(query, **dwg)
                 
@@ -140,32 +143,57 @@ def seed_qdrant():
         print(f"Failed Qdrant seed: {e}")
 
 async def seed_postgres():
-    uri = os.getenv("POSTGRES_URI", "postgresql://atw_user:atw_dev_password@localhost:5432/askthewall")
+    """
+    Previously used raw asyncpg against postgresql://atw_user:...@.../askthewall
+    — a database/user that no longer exists (the two-database split was
+    unified into the single `fieldpilot` DB docker-compose.yml now runs),
+    and inserted columns (zone_id string literal, unquoted JSON) that don't
+    match the real ResolvedIncident/ComplianceEvent SQLAlchemy models
+    (api/models/resolved_incident.py, api/models/compliance.py) — this
+    would have failed against the real schema even with correct credentials.
+    Goes through the same ORM/engine api/db.py uses everywhere else instead
+    of a second, drifted raw-SQL path.
+    """
     print("Connecting to Postgres to seed incidents...")
     try:
-        conn = await asyncpg.connect(uri)
-        
-        for _ in range(47):
-            await conn.execute('''
-            INSERT INTO resolved_incidents (
-                incident_id, project_id, zone_id, asset_type, issue_type,
-                measurement_at_detection, spec_value, resolution, outcome_metrics
-            ) VALUES (
-                gen_random_uuid(), 'P-001', 'A12', 'rebar', 'spacing_violation',
-                200.0, 150.0, '{"action": "reworked"}', '{"cost_avoided_usd": 3978, "time_saved": 4}'
-            )
-            ''')
-            
-        for z in ["A12", "C7"]:
-            await conn.execute(f'''
-            INSERT INTO compliance_events (
-                zone_id, asset_type, severity, measured_value, spec_value, deviation_pct, worker_id
-            ) VALUES (
-                '{z}', 'rebar', 'high', 200.0, 150.0, 33.3, 'W-001'
-            )
-            ''')
-            
-        await conn.close()
+        from db import async_session
+        from models.resolved_incident import ResolvedIncident
+        from models.compliance import ComplianceEvent
+        from sqlalchemy import select
+
+        async with async_session() as session:
+            existing = await session.execute(select(ResolvedIncident.id).limit(1))
+            if existing.scalar_one_or_none() is not None:
+                print("Postgres already has resolved_incidents — skipping seed.")
+                return
+
+            for i in range(47):
+                session.add(ResolvedIncident(
+                    incident_id=f"seed-incident-{i}",
+                    project_id="default-project",
+                    zone_id="A12",
+                    asset_type="rebar",
+                    issue_type="spacing_violation",
+                    measurement_at_detection=200.0,
+                    spec_value=150.0,
+                    resolution=json.dumps({"action": "reworked"}),
+                    outcome_metrics=json.dumps({"cost_avoided_usd": 3978, "time_saved": 4}),
+                ))
+
+            for z in ["A12", "C7"]:
+                session.add(ComplianceEvent(
+                    zone_code=z,
+                    asset_id=f"rebar_{z}",
+                    severity="high",
+                    measured_value=200.0,
+                    spec_value=150.0,
+                    deviation_pct=33.3,
+                    confidence=0.9,
+                    worker_id="W-001",
+                    status="resolved",
+                ))
+
+            await session.commit()
         print("Postgres successfully seeded.")
     except Exception as e:
         print(f"Failed Postgres seed: {e}")

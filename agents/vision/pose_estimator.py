@@ -199,12 +199,22 @@ class PoseEstimator:
             "track_id": track_id,
             "keypoints": keypoints,
             "fall_detected": fall_detected,
-            "fall_confidence": round(fall_conf, 3),
-            "head_yaw_deg": round(head_yaw, 1),
-            "looking_away": abs(head_yaw) > YAW_LOOKING_AWAY,
-            "body_angle_deg": round(body_angle, 1),
-            "mid_hip": {"x": mid_hip[0], "y": mid_hip[1]},
-            "mid_shoulder": {"x": mid_shoulder[0], "y": mid_shoulder[1]},
+            # float() before round() — round() on a numpy scalar returns
+            # another numpy scalar (still not JSON-serializable), not a
+            # native Python float, same root cause as mid_hip/mid_shoulder
+            # above.
+            "fall_confidence": round(float(fall_conf), 3),
+            "head_yaw_deg": round(float(head_yaw), 1),
+            "looking_away": bool(abs(head_yaw) > YAW_LOOKING_AWAY),
+            "body_angle_deg": round(float(body_angle), 1),
+            # float() — mid_hip/mid_shoulder come from _midpoint() on raw
+            # numpy keypoint arrays (numpy.float32), which json.dumps()
+            # cannot serialize. Caught live during a sustained pipeline
+            # rehearsal: every frame with a detected person crashed the
+            # offline-queue fallback path with "Object of type float32 is
+            # not JSON serializable" the moment the primary POST failed.
+            "mid_hip": {"x": float(mid_hip[0]), "y": float(mid_hip[1])},
+            "mid_shoulder": {"x": float(mid_shoulder[0]), "y": float(mid_shoulder[1])},
             "warnings": warnings,
         }
 

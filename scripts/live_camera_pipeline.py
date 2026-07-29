@@ -42,6 +42,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 
 from agents.vision.detector import VisionPipeline
+from agents.voice.earcons import play_earcon, HazardCategory
 from scripts.offline_queue import OfflineQueue
 
 # ---------------------------------------------------------------------------
@@ -81,8 +82,10 @@ class VoiceAlerter:
         self._lock    = threading.Lock()
         # Current violation state (updated by ML every 0.5s)
         self._falls:        list[str] = []     # list of fallen worker IDs
+        self._struck_by:    list[str] = []     # worker IDs near heavy equipment
         self._n_ppe:        int = 0            # number of PPE violators
         self._ppe_items:    list[str] = []     # unique missing items
+        self._escalated:    int = 0            # workers with ESCALATED attention state
         self._risk_level:   str = "normal"
         self._zone_id:      str = "A12"
         self._running = True
@@ -107,38 +110,47 @@ class VoiceAlerter:
             print(f"[VOICE] TTS unavailable: {e}. Run: pip install pyttsx3")
             self._engine = None
 
-    def _build_alert_text(self) -> str | None:
+    def _build_alert_text(self) -> tuple[str, "HazardCategory"] | tuple[None, None]:
         """
-        Build the single alert sentence for the CURRENT state.
-        Returns None if everything is safe (nothing to say).
-        Priority: falls > PPE > zone risk.
+        Build the single alert sentence for the CURRENT state, plus the
+        earcon category to play immediately before it — the category
+        matches whichever condition actually drove the sentence (highest
+        priority first), so the audio cue and the words are always about
+        the same hazard. Returns (None, None) if everything is safe.
+        Priority: falls > struck-by > PPE > escalated attention > zone risk.
         """
         with self._lock:
             falls      = list(self._falls)
+            struck_by  = list(self._struck_by)
             n_ppe      = self._n_ppe
             ppe_items  = list(dict.fromkeys(self._ppe_items[:4]))  # deduplicate
+            escalated  = self._escalated
             risk       = self._risk_level
             zone       = self._zone_id
 
-        parts = []
-
         if falls:
             who = " and ".join(falls[:2])  # max 2 names to keep it short
-            parts.append(f"Warning! Worker {who} has fallen in Zone {zone}. Respond immediately.")
+            return (f"Warning! Worker {who} has fallen in Zone {zone}. Respond immediately.", HazardCategory.FALL)
+
+        if struck_by:
+            who = " and ".join(struck_by[:2])
+            return (f"Danger! Worker {who} is too close to heavy equipment in Zone {zone}. Move back.", HazardCategory.STRUCK_BY)
 
         if n_ppe > 0:
             items_str = ", ".join(ppe_items) if ppe_items else "safety equipment"
             who = "1 worker is" if n_ppe == 1 else f"{n_ppe} workers are"
-            parts.append(f"Safety alert! {who} missing {items_str} in Zone {zone}.")
+            return (f"Safety alert! {who} missing {items_str} in Zone {zone}.", HazardCategory.PPE_VIOLATION)
 
-        if risk in ("high", "critical") and not parts:
-            # Only speak risk if there's nothing else being said
+        if escalated > 0:
+            who = "1 worker has" if escalated == 1 else f"{escalated} workers have"
+            return (f"Reminder! {who} not acknowledged a flagged hazard in Zone {zone}.", HazardCategory.ESCALATED_ATTENTION)
+
+        if risk in ("high", "critical"):
             if risk == "critical":
-                parts.append(f"Critical risk in Zone {zone}. Supervisor required immediately.")
-            else:
-                parts.append(f"High risk in Zone {zone}. Check for safety violations.")
+                return (f"Critical risk in Zone {zone}. Supervisor required immediately.", HazardCategory.PPE_VIOLATION)
+            return (f"High risk in Zone {zone}. Check for safety violations.", HazardCategory.PPE_VIOLATION)
 
-        return " ".join(parts) if parts else None
+        return (None, None)
 
     def _continuous_loop(self):
         """
@@ -151,10 +163,11 @@ class VoiceAlerter:
                 time.sleep(0.2)
                 continue
 
-            text = self._build_alert_text()
+            text, category = self._build_alert_text()
 
             if text and self._engine:
-                print(f"[VOICE] >> {text}")
+                print(f"[VOICE] >> ({category.value}) {text}")
+                play_earcon(category)  # short distinct cue before the spoken alert
                 try:
                     self._engine.say(text)
                     self._engine.runAndWait()
@@ -175,20 +188,26 @@ class VoiceAlerter:
         zone   = result.get("zone_summary", {})
         risk   = zone.get("zone_risk_level", "normal")
         falls  = list(result.get("fall_events", []))
+        struck_by = list(result.get("struck_by_events", []))
 
         n_ppe     = 0
         ppe_items = []
+        escalated = 0
         for check in result.get("compliance_checks", []):
             violations = [item for item in ["hardhat", "vest", "gloves", "glasses", "boots"]
                           if check.get(item) is False]
             if violations:
                 n_ppe += 1
                 ppe_items.extend(violations)
+            if check.get("attention_state") == "ESCALATED":
+                escalated += 1
 
         with self._lock:
             self._falls      = falls
+            self._struck_by  = struck_by
             self._n_ppe      = n_ppe
             self._ppe_items  = ppe_items
+            self._escalated  = escalated
             self._risk_level = risk
             self._zone_id    = zone_id
 

@@ -1,13 +1,16 @@
 from fastapi import APIRouter, HTTPException, Request
+from pydantic import BaseModel
 import uuid
 import sys
 import os
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../../")))
 from agents.memory.retriever import MemoryRetriever, MemoryRequest, client as qdrant_client
-from agents.drawing.indexer import collection_name
+from agents.drawing.indexer import DocumentIndexer, collection_name
 
 router = APIRouter(prefix="/api/v1/memory", tags=["Project Memory (Agent 7)"])
+
+_indexer = DocumentIndexer()
 
 # Initialize Retriever
 retriever = MemoryRetriever()
@@ -55,9 +58,43 @@ async def query_memory(req: MemoryRequest, request: Request):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+class IndexMemoryRequest(BaseModel):
+    document_content: str
+    project_id: str = "default-project"
+    source: str | None = None
+    source_type: str = "document"  # email | meeting_minutes | whatsapp | change_order | rfi | document
+    date: str | None = None
+    approved_by: str | None = None
+
+
 @router.post("/index")
-async def index_memory(document_content: str):
+async def index_memory(req: IndexMemoryRequest):
     """
-    Index a resolved issue or approved RFI into the project memory vector database.
+    Real chunk -> BGE-M3-family embed -> Qdrant upsert into the SAME
+    project_{project_id}_drawings collection MemoryRetriever/QdrantRetrieval
+    already searches (agents/drawing/indexer.py's collection-naming
+    convention) — so anything indexed here is immediately retrievable
+    through POST /memory/query. Previously this was a no-op stub that
+    always returned success without touching any store.
     """
-    return {"status": "success", "message": "Document indexed successfully into long-term memory (MVP Stub)."}
+    if not req.document_content.strip():
+        raise HTTPException(status_code=400, detail="document_content is empty")
+
+    doc_id = str(uuid.uuid4())
+    count = _indexer.index_document(
+        doc_id,
+        req.document_content,
+        project_id=req.project_id,
+        source=req.source or f"{req.source_type}_{doc_id[:8]}",
+        extra_payload={
+            "source_type": req.source_type,
+            "date": req.date,
+            "approved_by": req.approved_by,
+        },
+    )
+    return {
+        "status": "success",
+        "document_id": doc_id,
+        "indexed_chunks": count,
+        "message": f"Indexed {count} chunks into project memory." if count else "Nothing indexed — check Qdrant connectivity.",
+    }

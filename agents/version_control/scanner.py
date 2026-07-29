@@ -163,22 +163,27 @@ class VersionControlScanner:
                 query = """
                 MATCH (d:Drawing {number: $drawing_number})
                 WHERE NOT (d)-[:SUPERSEDES]->(:Drawing)
-                RETURN d.revision as latest_revision, 
+                RETURN d.revision as latest_revision,
                        d.approved_date as approved_date,
-                       d.key_changes as key_changes
+                       d.key_changes as key_changes,
+                       d.approved_by as approved_by
                 """
                 result = session.run(query, drawing_number=drawing_number)
                 record = result.single()
-                
+
             driver.close()
-            
+
             if record:
+                # approved_by is real Neo4j data (see scripts/seed_demo_data.py)
+                # when present; previously this was unconditionally
+                # "David Park, SE" even for drawings whose real approver
+                # (e.g. Sarah Chen on M-045) was different or unknown.
                 return {
                     "number": drawing_number,
                     "revision": record["latest_revision"],
                     "date": record["approved_date"],
                     "key_changes": record["key_changes"],
-                    "approved_by": "David Park, SE" # Hardcoded for demo if not in graph
+                    "approved_by": record["approved_by"] or "Unknown"
                 }
         except Exception as e:
             logger.error(f"Neo4j Lookup Failed: {e}")

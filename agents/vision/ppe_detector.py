@@ -39,6 +39,17 @@ PPE_MODEL_REPO  = "keremberke/yolov8n-hard-hat-detection"
 PPE_MODEL_NAME  = "best.pt"
 PPE_CONF_THRESH = 0.40
 
+# Same model (Hardhat/NO-Hardhat, 2 classes), cached locally at
+# api/weights/best.pt — previously this was fetched from the HF hub over
+# the network on every process start regardless of whether a local copy
+# existed, a real reliability risk for a live demo on venue WiFi. NOT the
+# general YOLO_MODEL_PATH detector's weights: that pipeline keys off a
+# "person" class this 2-class model doesn't have, so it must stay separate.
+_LOCAL_PPE_MODEL_PATH = os.getenv(
+    "PPE_MODEL_PATH",
+    os.path.abspath(os.path.join(os.path.dirname(__file__), "../../api/weights/best.pt")),
+)
+
 HARDHAT_LABELS     = {"hardhat", "hard hat", "helmet", "safety helmet", "hard-hat"}
 NO_HARDHAT_LABELS  = {"no-hardhat", "no hardhat", "no_hardhat", "head", "bare head"}
 
@@ -88,8 +99,22 @@ class PpeDetector:
     # Model loading
     # ------------------------------------------------------------------
     def _load_model(self):
+        from ultralytics import YOLO
+
+        if os.path.exists(_LOCAL_PPE_MODEL_PATH):
+            try:
+                print(f"[PPE] Loading hard-hat detection model from local weights: {_LOCAL_PPE_MODEL_PATH}")
+                self.model = YOLO(_LOCAL_PPE_MODEL_PATH)
+                dummy = np.zeros((64, 64, 3), dtype=np.uint8)
+                self.model(dummy, verbose=False)
+                if hasattr(self.model, "names"):
+                    self.class_names = self.model.names
+                print(f"[PPE] Model loaded. Classes: {self.class_names}")
+                return
+            except Exception as e:
+                print(f"[PPE] ⚠ Local weights failed to load ({e}). Falling back to HF hub.")
+
         try:
-            from ultralytics import YOLO
             print("[PPE] Loading hard-hat detection model from HuggingFace hub…")
             self.model = YOLO(
                 f"https://huggingface.co/{PPE_MODEL_REPO}/resolve/main/{PPE_MODEL_NAME}"

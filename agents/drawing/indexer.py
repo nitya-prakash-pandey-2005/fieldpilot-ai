@@ -53,7 +53,7 @@ class DocumentIndexer:
             start = end - overlap
         return chunks
 
-    def index_document(self, document_id: str, text: str, project_id: str = "default-project", source: str = None):
+    def index_document(self, document_id: str, text: str, project_id: str = "default-project", source: str = None, extra_payload: dict = None):
         if not text:
             return 0
 
@@ -68,19 +68,22 @@ class DocumentIndexer:
 
         points = []
         for idx, (chunk, emb) in enumerate(zip(chunks, embeddings)):
-            points.append(PointStruct(
-                id=str(uuid.uuid4()),
-                vector=emb.tolist(),
-                payload={
-                    "document_id": document_id,
-                    "text": chunk,
-                    "chunk_index": idx,
-                    # "source" matches what agents/memory/retriever.py reads
-                    # back out (r.payload.get("source", "")) for citations.
-                    "source": source or document_id,
-                    "project_id": project_id,
-                }
-            ))
+            payload = {
+                "document_id": document_id,
+                "text": chunk,
+                "chunk_index": idx,
+                # "source" matches what agents/memory/retriever.py reads
+                # back out (r.payload.get("source", "")) for citations.
+                "source": source or document_id,
+                "project_id": project_id,
+            }
+            # source_type/date/approved_by — read by MemoryRetriever's
+            # _ungrounded_response and LLM-grounded citations; only drawing
+            # PDFs went through this path before, so these were always
+            # absent for anything indexed via POST /memory/index.
+            if extra_payload:
+                payload.update({k: v for k, v in extra_payload.items() if v is not None})
+            points.append(PointStruct(id=str(uuid.uuid4()), vector=emb.tolist(), payload=payload))
 
         try:
             self.qdrant_client.upsert(

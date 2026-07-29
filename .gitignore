@@ -52,4 +52,7 @@ Thumbs.db
 # Project specifics
 tree_output.txt
 clean_tree.txt
+
+# Runtime state (regenerated locally, not fixture data)
+data/offline_queue.db
 *.log

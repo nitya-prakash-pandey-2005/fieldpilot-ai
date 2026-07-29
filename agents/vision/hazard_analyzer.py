@@ -50,6 +50,13 @@ class HazardAssessment:
     looking_away: bool = False
     attention_state: str = PASSIVE  # PASSIVE | ACKNOWLEDGED | ESCALATED (see attention_tracker.py)
 
+    # Struck-by signals (agents/vision/equipment_detector.py) — one of
+    # OSHA's construction "Focus Four" hazard categories, alongside falls
+    # (pose) and PPE, both already covered above.
+    struck_by_risk: bool = False
+    nearest_equipment_type: Optional[str] = None
+    nearest_equipment_distance_px: Optional[float] = None
+
     # Scored output
     hazard_score: int = 0          # 0–100
     risk_level: str = "normal"     # normal | elevated | high | critical
@@ -75,6 +82,7 @@ WEIGHT_NO_VEST = 20
 WEIGHT_LOOKING_AWAY = 10
 WEIGHT_BOTH_PPE_MISSING = 20    # extra penalty when both are missing
 WEIGHT_ESCALATED_ATTENTION = 25  # extra penalty when a hazard has gone unacknowledged too long
+WEIGHT_STRUCK_BY_PROXIMITY = 45  # worker within STRUCK_BY_PROXIMITY_PX of moving equipment
 
 
 # ---------------------------------------------------------------------------
@@ -104,6 +112,7 @@ class HazardAnalyzer:
         pose_result: Optional[dict] = None,
         attention_tracker: Optional[AttentionStateMachine] = None,
         timestamp: Optional[float] = None,
+        nearby_equipment: Optional[tuple[float, dict]] = None,
     ) -> HazardAssessment:
         """
         Produce a HazardAssessment for a single worker.
@@ -120,6 +129,9 @@ class HazardAnalyzer:
             timestamp:   Inject a specific timestamp (for testing the
                 attention state machine on a scripted sequence without real
                 sleeps); defaults to time.time().
+            nearby_equipment: (distance_px, equipment_dict) tuple from
+                EquipmentDetector.nearest_equipment_distance() for this
+                worker, or None if no equipment was detected in frame.
 
         Returns:
             HazardAssessment dataclass.
@@ -146,6 +158,14 @@ class HazardAnalyzer:
             assessment.head_yaw_deg = pose_result.get("head_yaw_deg", 0.0)
             assessment.looking_away = pose_result.get("looking_away", False)
 
+        # ---- Struck-by signals (heavy equipment proximity) --------------
+        if nearby_equipment is not None:
+            distance_px, equipment = nearby_equipment
+            from agents.vision.equipment_detector import STRUCK_BY_PROXIMITY_PX
+            assessment.nearest_equipment_type = equipment.get("equipment_type")
+            assessment.nearest_equipment_distance_px = round(distance_px, 1)
+            assessment.struck_by_risk = distance_px < STRUCK_BY_PROXIMITY_PX
+
         # ---- Score computation ------------------------------------------
         score = 0
         warnings = list(ppe_status.get("violations", []))
@@ -160,6 +180,11 @@ class HazardAnalyzer:
         elif assessment.body_angle_deg > 50:
             score += WEIGHT_FALL_NEAR
             warnings.append(f"NEAR-FALL: body angle {assessment.body_angle_deg:.0f}°")
+
+        # Struck-by (heavy equipment proximity)
+        if assessment.struck_by_risk:
+            score += WEIGHT_STRUCK_BY_PROXIMITY
+            warnings.insert(0, f"⚠ STRUCK-BY RISK — {assessment.nearest_equipment_type} within {assessment.nearest_equipment_distance_px:.0f}px")
 
         # PPE
         if not assessment.hardhat_present:
@@ -206,6 +231,8 @@ class HazardAnalyzer:
         # ---- Primary alert message -------------------------------------
         if assessment.fall_detected:
             assessment.primary_alert = f"FALL DETECTED — Worker {worker_id} down in Zone {zone_id}"
+        elif assessment.struck_by_risk:
+            assessment.primary_alert = f"STRUCK-BY RISK — Worker {worker_id} near {assessment.nearest_equipment_type} in Zone {zone_id}"
         elif not assessment.hardhat_present and not assessment.vest_present:
             assessment.primary_alert = f"Worker {worker_id}: No hardhat AND no vest in Zone {zone_id}"
         elif not assessment.hardhat_present:
@@ -235,6 +262,7 @@ class HazardAnalyzer:
         pose_results: list[dict],
         attention_tracker: Optional[AttentionStateMachine] = None,
         timestamp: Optional[float] = None,
+        equipment: Optional[list[dict]] = None,
     ) -> list[HazardAssessment]:
         """
         Batch-analyze all persons detected in a frame.
@@ -250,10 +278,14 @@ class HazardAnalyzer:
                 state; omitted means attention stays PASSIVE.
             timestamp:    Inject a specific timestamp for testing; defaults
                 to time.time() per-person inside analyze().
+            equipment:    list of detections from EquipmentDetector.detect()
+                for this frame, or None/[] if unavailable — struck-by
+                scoring is simply skipped in that case.
 
         Returns:
             list of HazardAssessment objects (one per person).
         """
+        from agents.vision.equipment_detector import EquipmentDetector
         # Build pose lookup by track_id
         pose_by_track: dict[int, dict] = {}
         for pr in pose_results:
@@ -276,6 +308,12 @@ class HazardAnalyzer:
             elif i < len(pose_results):
                 pose_result = pose_results[i]
 
+            nearby_equipment = None
+            if equipment:
+                nearby_equipment = EquipmentDetector.nearest_equipment_distance(
+                    person.get("bounding_box", {}), equipment
+                )
+
             assessment = self.analyze(
                 worker_id=worker_id,
                 track_id=track_id,
@@ -284,6 +322,7 @@ class HazardAnalyzer:
                 pose_result=pose_result,
                 attention_tracker=attention_tracker,
                 timestamp=timestamp,
+                nearby_equipment=nearby_equipment,
             )
             assessments.append(assessment)
 

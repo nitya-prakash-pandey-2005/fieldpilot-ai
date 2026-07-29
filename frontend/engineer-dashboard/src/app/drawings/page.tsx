@@ -1,23 +1,56 @@
 "use client";
-import { useState, useRef } from 'react';
-import { FileBox, FileWarning, CheckCircle, Upload, Search, Loader2 } from 'lucide-react';
+import { useState, useRef, useEffect, useCallback } from 'react';
+import { FileBox, Upload, Search, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { mockDrawings } from '@/data/mockData';
+import { LiveIndicator } from '@/components/ui/LiveIndicator';
 
 const API = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+
+// Real list from GET /api/v1/drawing/list — grouped from actual Qdrant
+// chunk payloads written by /parse (agents/drawing/indexer.py), merged
+// with real Neo4j Drawing node metadata where the filename matches a
+// known drawing number. mockDrawings is only the pre-fetch placeholder
+// now, the same pattern rfis/page.tsx uses — previously this table
+// rendered mockDrawings unconditionally with no backend call at all.
+interface RealDrawing {
+  id: string;
+  number: string;
+  discipline: string;
+  latest_revision: string | null;
+  latest_date: string | null;
+  approved_by: string | null;
+  indexed_chunks: number;
+  source_file: string;
+}
 
 export default function DrawingsPage() {
   const [search, setSearch] = useState('');
   const [uploading, setUploading] = useState(false);
+  const [drawings, setDrawings] = useState<RealDrawing[] | typeof mockDrawings>(mockDrawings);
+  const [isLive, setIsLive] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // No "list all drawings" endpoint exists yet (api/routes/version_control.py
-  // only has /scan, /commit, /history/{asset_id}) — this table stays on
-  // mockDrawings until that's built (see the remaining-execution plan).
-  // Upload IS real, though: it calls the actual drawing parser/indexer
-  // (agents/drawing/parser.py + indexer.py, unified onto Qdrant this
-  // session) — previously this button only showed a fake toast.
-  const filteredDrawings = mockDrawings.filter(d =>
+  const refresh = useCallback(async () => {
+    try {
+      const res = await fetch(`${API}/api/v1/drawing/list`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const json = await res.json();
+      const rows: RealDrawing[] = json?.data || [];
+      if (rows.length > 0) {
+        setDrawings(rows);
+        setIsLive(true);
+      }
+      // If nothing's been indexed yet in a fresh project, keep showing the
+      // illustrative mock rows rather than an empty table.
+    } catch {
+      setIsLive(false);
+    }
+  }, []);
+
+  useEffect(() => { refresh(); }, [refresh]);
+
+  const filteredDrawings = drawings.filter((d: any) =>
     !search || d.number.toLowerCase().includes(search.toLowerCase()) || d.discipline.toLowerCase().includes(search.toLowerCase())
   );
 
@@ -35,6 +68,7 @@ export default function DrawingsPage() {
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       toast.success(`${file.name}: ${data.indexed_chunks} chunks indexed into project memory`);
+      await refresh();
     } catch (err) {
       toast.error('Upload failed — could not reach the drawing parser');
     } finally {
@@ -50,8 +84,9 @@ export default function DrawingsPage() {
           <h1 className="text-3xl font-bold text-[var(--text-primary)] tracking-tight flex items-center gap-3">
             <FileBox className="text-[var(--cyan)]" size={32} />
             Drawing Versions
+            <LiveIndicator isLive={isLive} />
           </h1>
-          <p className="text-[var(--text-secondary)] mt-2">Agent 8 monitors field usage in real-time to prevent outdated revision usage.</p>
+          <p className="text-[var(--text-secondary)] mt-2">Agent 3 indexes uploaded drawings for RAG retrieval; Agent 8 resolves revisions against real Neo4j drawing records.</p>
         </div>
 
         <div className="flex gap-4 items-center">
@@ -86,11 +121,11 @@ export default function DrawingsPage() {
                 <th className="p-4 text-xs font-bold text-[var(--text-muted)] uppercase tracking-widest">Discipline</th>
                 <th className="p-4 text-xs font-bold text-[var(--text-muted)] uppercase tracking-widest">Latest Approved</th>
                 <th className="p-4 text-xs font-bold text-[var(--text-muted)] uppercase tracking-widest">Approved By</th>
-                <th className="p-4 text-xs font-bold text-[var(--text-muted)] uppercase tracking-widest">Field Usage Detections</th>
+                <th className="p-4 text-xs font-bold text-[var(--text-muted)] uppercase tracking-widest">RAG Index Status</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[var(--border-subtle)]">
-              {filteredDrawings.map(dwg => (
+              {filteredDrawings.map((dwg: any) => (
                 <tr key={dwg.id} className="hover:bg-[var(--bg-hover)] transition-colors group">
                   <td className="p-4">
                     <div className="flex items-center gap-3">
@@ -103,29 +138,19 @@ export default function DrawingsPage() {
                   <td className="p-4 text-sm text-[var(--text-secondary)]">{dwg.discipline}</td>
                   <td className="p-4">
                     <div className="flex flex-col">
-                      <span className="font-mono text-[var(--pass)] font-bold text-lg">{dwg.latest_revision}</span>
-                      <span className="text-xs text-[var(--text-muted)]">{dwg.latest_date}</span>
+                      <span className="font-mono text-[var(--pass)] font-bold text-lg">{dwg.latest_revision || '—'}</span>
+                      <span className="text-xs text-[var(--text-muted)]">{dwg.latest_date || 'Not matched to a graph record'}</span>
                     </div>
                   </td>
-                  <td className="p-4 text-sm text-[var(--text-secondary)]">{dwg.approved_by}</td>
+                  <td className="p-4 text-sm text-[var(--text-secondary)]">{dwg.approved_by || '—'}</td>
                   <td className="p-4">
-                    <div className="flex flex-col gap-2">
-                      {dwg.field_usage.map((usage, idx) => (
-                        <div key={idx} className="flex items-center gap-3">
-                          <span className="text-xs text-[var(--text-muted)] w-16">{usage.worker}</span>
-                          <span className="text-xs font-mono bg-[var(--bg-elevated)] border border-[var(--border-subtle)] px-2 py-0.5 rounded">{usage.revision_scanned}</span>
-                          {usage.status === 'MISMATCH' ? (
-                            <span className="flex items-center gap-1 text-[10px] font-bold tracking-widest uppercase bg-[var(--fail-dim)] text-[var(--fail)] border border-[var(--fail)]/30 px-2 py-0.5 rounded-full">
-                              <FileWarning size={10} /> Mismatch
-                            </span>
-                          ) : (
-                            <span className="flex items-center gap-1 text-[10px] font-bold tracking-widest uppercase text-[var(--pass)] opacity-80">
-                              <CheckCircle size={12} /> Compliant
-                            </span>
-                          )}
-                        </div>
-                      ))}
-                    </div>
+                    {dwg.indexed_chunks !== undefined ? (
+                      <span className="text-[10px] font-bold tracking-widest uppercase text-[var(--pass)] opacity-80">
+                        ✓ {dwg.indexed_chunks} chunks indexed
+                      </span>
+                    ) : (
+                      <span className="text-[10px] font-bold tracking-widest uppercase text-[var(--text-muted)]">Demo data</span>
+                    )}
                   </td>
                 </tr>
               ))}
