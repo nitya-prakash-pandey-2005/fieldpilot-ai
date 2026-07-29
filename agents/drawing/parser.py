@@ -58,13 +58,27 @@ class DocumentParser:
         try:
             converter = self._get_docling()
             result = converter.convert(file_path)
-            # docling result contains the exported markdown
             text = result.document.export_to_markdown()
-            # Rough confidence proxy - if text is very short for a pdf, it might have failed to OCR/extract
             confidence = 1.0 if len(text) > 100 else 0.4
             return text, confidence
         except Exception as e:
-            print(f"Docling parsing error: {e}")
+            print(f"Docling parsing error: {e}. Falling back to PyPDF2...")
+            return self._parse_with_pypdf2(file_path)
+            
+    def _parse_with_pypdf2(self, file_path: str):
+        try:
+            import PyPDF2
+            text = ""
+            with open(file_path, 'rb') as file:
+                reader = PyPDF2.PdfReader(file)
+                for page in reader.pages:
+                    extracted = page.extract_text()
+                    if extracted:
+                        text += extracted + "\n\n"
+            confidence = 0.8 if len(text) > 100 else 0.2
+            return text, confidence
+        except Exception as e:
+            print(f"PyPDF2 error: {e}")
             return "", 0.0
 
     def _parse_with_llama(self, file_path: str, llama_parser):

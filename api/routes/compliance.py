@@ -4,10 +4,14 @@ from typing import List, Optional
 import uuid
 import sys
 import os
-import asyncpg
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../../")))
 from agents.compliance.validator import ComplianceEngine, ValidationRequest
+from db import get_db
+from models.compliance import ComplianceEvent
+from fastapi import Depends
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 
 router = APIRouter(prefix="/api/v1/compliance", tags=["Compliance Validation (Agent 5)"])
 
@@ -32,19 +36,28 @@ async def validate_measurement(req: ValidationRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/issues")
-async def get_active_issues():
-    uri = os.getenv("POSTGRES_URI", "postgresql://atw_user:atw_dev_password@localhost:5432/askthewall")
+async def get_active_issues(db: AsyncSession = Depends(get_db)):
     try:
-        conn = await asyncpg.connect(uri)
-        rows = await conn.fetch("""
-            SELECT id, zone_id, asset_type, severity, measured_value, spec_value, deviation_pct, worker_id, status, created_at 
-            FROM compliance_events 
-            ORDER BY created_at DESC 
-            LIMIT 20
-        """)
-        await conn.close()
-        
-        # Convert datetime objects to ISO strings for JSON serialization
-        return [{**dict(r), "created_at": r["created_at"].isoformat()} for r in rows]
+        result = await db.execute(
+            select(ComplianceEvent).order_by(ComplianceEvent.created_at.desc()).limit(20)
+        )
+        rows = result.scalars().all()
+        return [
+            {
+                "id": r.id,
+                "zone_code": r.zone_code,
+                "asset_id": r.asset_id,
+                "field_issue_id": r.field_issue_id,
+                "severity": r.severity,
+                "measured_value": r.measured_value,
+                "spec_value": r.spec_value,
+                "deviation_pct": r.deviation_pct,
+                "confidence": r.confidence,
+                "worker_id": r.worker_id,
+                "status": r.status,
+                "created_at": r.created_at.isoformat() if r.created_at else None,
+            }
+            for r in rows
+        ]
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

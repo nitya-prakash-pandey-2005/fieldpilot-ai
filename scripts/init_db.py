@@ -1,90 +1,54 @@
-import os
-import asyncio
-import asyncpg
-from dotenv import load_dotenv
+"""
+DB Init — FieldPilot AI
+--------------------------
+Creates every SQLAlchemy table (Zone, FieldIssue, Project, Asset,
+Observation, ComplianceEvent, NotificationAudit — all sharing the Base in
+api/models/zones.py) against the single unified `fieldpilot` Postgres DB.
 
-load_dotenv()
+api/main.py's FastAPI lifespan already does this automatically on server
+startup — this script exists for setting up the DB standalone (CI, a fresh
+docker-compose volume, or local testing) without booting the whole API.
+
+Previously this ran hand-written raw SQL against a SECOND, separate
+Postgres database (`askthewall`) for compliance_events/notification_audit,
+disconnected from the `fieldpilot` DB the rest of the app used. Both tables
+are now real SQLAlchemy models in the one DB — see agents/compliance/
+validator.py and agents/notification/router.py.
+
+Run:
+  python scripts/init_db.py
+"""
+
+import os
+import sys
+import asyncio
+
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
+
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+API_DIR = os.path.join(ROOT, "api")
+sys.path.insert(0, API_DIR)
+
+from dotenv import load_dotenv
+load_dotenv(os.path.join(ROOT, ".env"))
+
 
 async def init_db():
-    uri = os.getenv("POSTGRES_URI", "postgresql://atw_user:atw_dev_password@localhost:5432/askthewall")
-    
-    # Connect to default postgres to create database if not exists
-    default_uri = uri.rsplit('/', 1)[0] + "/postgres"
-    db_name = uri.rsplit('/', 1)[1]
-    
-    print(f"Connecting to Postgres to ensure DB '{db_name}' exists...")
-    try:
-        sys_conn = await asyncpg.connect(default_uri)
-        # asyncpg doesn't support parameterized CREATE DATABASE
-        db_exists = await sys_conn.fetchval("SELECT 1 FROM pg_database WHERE datname = $1", db_name)
-        if not db_exists:
-            print(f"Creating database {db_name}...")
-            await sys_conn.execute(f'CREATE DATABASE "{db_name}"')
-        await sys_conn.close()
-    except Exception as e:
-        print(f"Failed to connect to Postgres server: {e}")
-        print("Continuing assuming DB exists or is mocked...")
-        
-    print(f"Connecting to {db_name} to create tables...")
-    try:
-        conn = await asyncpg.connect(uri)
-        
-        await conn.execute('''
-        CREATE TABLE IF NOT EXISTS notification_audit (
-          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-          notification_id UUID NOT NULL,
-          incident_id UUID,
-          severity VARCHAR NOT NULL,
-          zone_id VARCHAR,
-          asset_id VARCHAR,
-          channels_attempted TEXT[],
-          channels_delivered TEXT[],
-          dispatch_results JSONB,
-          mock_channels TEXT[],
-          created_at TIMESTAMPTZ DEFAULT NOW()
-        );
-        ''')
-        print("Successfully created notification_audit table.")
+    from db import engine
+    from models.zones import Base
+    from models.issues import FieldIssue           # noqa: F401 (registers table on Base.metadata)
+    from models.project import Project, Asset       # noqa: F401
+    from models.observation import Observation      # noqa: F401
+    from models.compliance import ComplianceEvent   # noqa: F401
+    from models.notification import NotificationAudit  # noqa: F401
+    from models.resolved_incident import ResolvedIncident  # noqa: F401
 
-        await conn.execute('''
-        CREATE TABLE IF NOT EXISTS resolved_incidents (
-          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-          incident_id UUID UNIQUE NOT NULL,
-          project_id VARCHAR NOT NULL,
-          zone_id VARCHAR NOT NULL,
-          asset_type VARCHAR NOT NULL,
-          issue_type VARCHAR NOT NULL,
-          measurement_at_detection FLOAT,
-          spec_value FLOAT,
-          resolution JSONB NOT NULL,
-          photos JSONB,
-          outcome_metrics JSONB NOT NULL,
-          tags TEXT[],
-          created_at TIMESTAMPTZ DEFAULT NOW()
-        );
-        ''')
-        print("Successfully created resolved_incidents table.")
-        
-        await conn.execute('''
-        DROP TABLE IF EXISTS compliance_events;
-        CREATE TABLE compliance_events (
-          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-          zone_id VARCHAR,
-          asset_type VARCHAR,
-          severity VARCHAR,
-          measured_value FLOAT,
-          spec_value FLOAT,
-          deviation_pct FLOAT,
-          worker_id VARCHAR,
-          status VARCHAR DEFAULT 'open',
-          created_at TIMESTAMPTZ DEFAULT NOW()
-        );
-        ''')
-        print("Successfully created compliance_events table.")
-        
-        await conn.close()
-    except Exception as e:
-        print(f"Failed to create tables: {e}")
+    print(f"Connecting to {engine.url.database} to create tables…")
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    print(f"✅ Tables ready: {', '.join(sorted(Base.metadata.tables.keys()))}")
+
 
 if __name__ == "__main__":
     asyncio.run(init_db())

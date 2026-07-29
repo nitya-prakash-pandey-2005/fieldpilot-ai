@@ -15,25 +15,45 @@ export function ExecutiveKPIBar() {
   const [isLive, setIsLive] = useState(false);
 
   useEffect(() => {
-    const fetchStats = async () => {
-      try {
-        const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000"}/api/v1/learning/stats`);
-        if (res.ok) {
-          const stats = await res.json();
-          setData(prev => ({
-            ...prev,
-            resolveTime: stats.avg_resolution_time_hours || prev.resolveTime,
-            workersAssisted: stats.total_incidents_learned || prev.workersAssisted
-          }));
-          setIsLive(true);
-        } else {
-          setIsLive(false);
+    const API = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+
+    const fetchAll = async () => {
+      // Each source is fetched independently so a failure in one (e.g. no
+      // baseline file yet) doesn't block the others from going live.
+      const results = await Promise.allSettled([
+        fetch(`${API}/api/v1/learning/stats`).then(r => r.ok ? r.json() : Promise.reject()),
+        fetch(`${API}/api/v1/projects/default-project/zones`).then(r => r.ok ? r.json() : Promise.reject()),
+        fetch(`${API}/api/v1/health/model-accuracy`).then(r => r.ok ? r.json() : Promise.reject()),
+      ]);
+      const [statsResult, zonesResult, accuracyResult] = results;
+
+      let anyLive = false;
+      setData(prev => {
+        const next = { ...prev };
+        if (statsResult.status === 'fulfilled') {
+          next.resolveTime = statsResult.value.avg_resolution_time_hours || prev.resolveTime;
+          next.workersAssisted = statsResult.value.total_incidents_learned || prev.workersAssisted;
+          anyLive = true;
         }
-      } catch (e) {
-        setIsLive(false);
-      }
+        if (zonesResult.status === 'fulfilled' && zonesResult.value.zones?.length) {
+          // Real project risk index: average of all zones' live risk_score
+          // (computed by api/tasks/scoring.py's real scoring engine, not a
+          // hardcoded figure).
+          const zones = zonesResult.value.zones;
+          const avgRisk = zones.reduce((sum: number, z: any) => sum + z.risk_score, 0) / zones.length;
+          next.riskIndex = Math.round(avgRisk);
+          anyLive = true;
+        }
+        if (accuracyResult.status === 'fulfilled' && accuracyResult.value.available) {
+          next.accuracy = accuracyResult.value.overall_accuracy_pct;
+          anyLive = true;
+        }
+        return next;
+      });
+      setIsLive(anyLive);
     };
-    fetchStats();
+
+    fetchAll();
   }, []);
 
   const kpis = [

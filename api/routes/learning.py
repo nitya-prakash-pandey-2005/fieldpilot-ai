@@ -55,40 +55,44 @@ async def get_trends():
     """
     Returns daily trend data for cost avoidance and incidents resolved over the last 30 days.
     """
-    import asyncpg
-    from datetime import datetime, timedelta
-    
-    uri = os.getenv("POSTGRES_URI", "postgresql://atw_user:atw_dev_password@localhost:5432/askthewall")
     try:
-        conn = await asyncpg.connect(uri)
-        
-        # Query groups by DATE(created_at) for the last 30 days.
-        # Uses JSONB extraction: outcome_metrics->>'cost_avoided_usd'
-        query = """
-        SELECT 
-            DATE(created_at) as trend_date,
-            COUNT(*) as incidents,
-            SUM(CAST(COALESCE(outcome_metrics->>'cost_avoided_usd', '0') AS FLOAT)) as cost_avoided
-        FROM resolved_incidents
-        WHERE created_at >= NOW() - INTERVAL '30 days'
-        GROUP BY DATE(created_at)
-        ORDER BY trend_date ASC;
-        """
-        records = await conn.fetch(query)
-        await conn.close()
-        
-        # Format the data for the frontend chart
-        data = []
-        for r in records:
-            data.append({
-                "date": r["trend_date"].strftime("%Y-%m-%d"),
-                "cost_avoided": float(r["cost_avoided"] or 0),
-                "incidents": int(r["incidents"] or 0)
-            })
-            
+        data = await exporter.get_trends(days=30)
         return {
             "status": "success",
             "data": data
         }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/recent-incidents")
+async def get_recent_incidents(limit: int = 10):
+    """
+    Returns the most recent resolved incidents (raw rows, not aggregated) —
+    powers the Executive Dashboard's "Recent Resolved Incidents" table,
+    which previously showed 5 permanently hardcoded rows with no backend
+    call despite this data (resolution notes, resolved_by, cost_avoided)
+    already existing in the same DatasetExporter used by /stats.
+    """
+    try:
+        import json as _json
+        incidents = await exporter._get_all_incidents()
+        incidents.sort(key=lambda i: i.get("created_at") or "", reverse=True)
+        rows = []
+        for inc in incidents[:limit]:
+            res_raw = inc.get("resolution") or "{}"
+            out_raw = inc.get("outcome_metrics") or "{}"
+            res = _json.loads(res_raw) if isinstance(res_raw, str) else (res_raw or {})
+            out = _json.loads(out_raw) if isinstance(out_raw, str) else (out_raw or {})
+            rows.append({
+                "issue": inc["issue_type"].replace("_", " ").title(),
+                "zone": inc["zone_id"],
+                "asset_type": inc["asset_type"],
+                "deviation": f"{inc['measurement_at_detection']} -> {inc['spec_value']}" if inc.get("measurement_at_detection") is not None else "n/a",
+                "resolved_by": res.get("resolved_by", "unknown"),
+                "time_hours": res.get("time_to_resolve_hours", 0),
+                "cost_saved_usd": out.get("cost_avoided_usd", out.get("cost_avoided", 0)),
+            })
+        return {"status": "success", "data": rows}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

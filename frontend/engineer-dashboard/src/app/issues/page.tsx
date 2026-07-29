@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { AlertTriangle, Clock, FileText, CheckCircle, ArrowUpRight, Loader2, Download } from 'lucide-react';
 import { toast } from 'sonner';
 import { useFieldIssues, FieldIssue } from '@/hooks/useFieldIssues';
+import { useAuth } from '@/context/AuthContext';
 import { SEVERITY } from '@/theme/severityColors';
 import IssueDetailPanel from '@/components/issues/IssueDetailPanel';
 import { format } from 'date-fns';
@@ -12,26 +13,27 @@ function issueTime(dateStr: string): string {
   const age = Date.now() - d.getTime();
   if (age < 60_000) return 'just now';
   if (age < 3600_000) return `${Math.floor(age/60000)}m ago`;
-  return format(d, 'h:mm aa'); 
+  return format(d, 'h:mm aa');
 }
 
-export default function IssuesPage() { 
+export default function IssuesPage() {
   const { issues, setIssues, summary, isLoading, error, newIssueId, resolveIssue, escalateIssue } = useFieldIssues('default-project');
-  const [activeFilter, setActiveFilter] = useState('ALL'); 
+  const { user } = useAuth();
+  const [activeFilter, setActiveFilter] = useState('ALL');
   const [selectedIssueId, setSelectedIssueId] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
-  
+
   const [resolveMode, setResolveMode] = useState<string | null>(null);
   const [resolutionNote, setResolutionNote] = useState('');
   const [resolving, setResolving] = useState(false);
-  
+
   const [escalateMode, setEscalateMode] = useState<string | null>(null);
   const [escalateRole, setEscalateRole] = useState('site_manager');
   const [escalationNote, setEscalationNote] = useState('');
   const [escalating, setEscalating] = useState(false);
 
   // Filter issues
-  const filteredIssues = issues.filter(i => 
+  const filteredIssues = issues.filter(i =>
     i.status === 'open' && (activeFilter === 'ALL' || i.severity.toLowerCase() === activeFilter.toLowerCase())
   );
 
@@ -62,9 +64,11 @@ export default function IssuesPage() {
     }
   };
 
+  // Actions are attributed to the logged-in user (was hardcoded 'current_user'
+  // regardless of who was actually signed in).
   const onResolveConfirm = async (issueId: string) => {
     setResolving(true);
-    const success = await resolveIssue(issueId, resolutionNote);
+    const success = await resolveIssue(issueId, resolutionNote, user?.id || user?.email);
     if (success) {
       setResolveMode(null);
       setResolutionNote('');
@@ -74,7 +78,7 @@ export default function IssuesPage() {
 
   const onEscalateConfirm = async (issueId: string) => {
     setEscalating(true);
-    const success = await escalateIssue(issueId, escalateRole, escalationNote);
+    const success = await escalateIssue(issueId, escalateRole, escalationNote, user?.id || user?.email);
     if (success) {
       setEscalateMode(null);
       setEscalationNote('');
@@ -84,47 +88,47 @@ export default function IssuesPage() {
 
   if (error) {
     return (
-      <div className="h-full flex items-center justify-center text-[#ff4444] bg-[#0a0a0a]">
+      <div className="h-full flex items-center justify-center text-[var(--fail)] bg-[var(--bg-base)]">
         <div className="text-center">
           <AlertTriangle size={48} className="mx-auto mb-4 opacity-50" />
           <h2 className="text-xl font-bold">Connection Error</h2>
-          <p className="text-white/50 mt-2">{error}</p>
+          <p className="text-[var(--text-muted)] mt-2">{error}</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="h-full p-8 flex flex-col min-h-0 bg-[#0a0a0a] relative">
+    <div className="h-full p-8 flex flex-col min-h-0 bg-[var(--bg-base)] relative">
       <div className="flex items-center justify-between mb-4">
         <div>
-          <h1 className="text-3xl font-bold text-white tracking-tight flex items-center gap-3">
-            <AlertTriangle className="text-[#ff4444]" size={32} />
+          <h1 className="text-3xl font-bold text-[var(--text-primary)] tracking-tight flex items-center gap-3">
+            <AlertTriangle className="text-[var(--fail)]" size={32} />
             Active Field Issues
           </h1>
-          <p className="text-white/50 mt-2">Real-time deviations detected by Vision & Measurement Agents.</p>
+          <p className="text-[var(--text-secondary)] mt-2">Real-time deviations detected by Vision & Measurement Agents.</p>
         </div>
-        
+
         <div className="flex gap-4">
-          <div className="bg-black/20 border border-white/10 rounded-lg p-1 flex">
+          <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg p-1 flex">
             {['ALL', 'CRITICAL', 'HIGH', 'MEDIUM'].map(f => (
               <button
                 key={f}
                 onClick={() => setActiveFilter(f)}
                 className={`px-4 py-2 rounded-md text-sm font-semibold transition-all ${
-                  activeFilter === f 
-                    ? 'bg-white/10 text-white shadow-lg' 
-                    : 'text-white/40 hover:text-white/80'
+                  activeFilter === f
+                    ? 'bg-[var(--bg-hover)] text-[var(--text-primary)] shadow-lg'
+                    : 'text-[var(--text-muted)] hover:text-[var(--text-secondary)]'
                 }`}
               >
                 {f}
               </button>
             ))}
           </div>
-          <button 
-            onClick={handleExport} 
+          <button
+            onClick={handleExport}
             disabled={exporting}
-            className="bg-[#111] hover:bg-[#222] text-white border border-white/20 px-4 py-2 rounded-lg font-semibold flex items-center gap-2 transition-all cursor-pointer disabled:opacity-50"
+            className="bg-[var(--bg-elevated)] hover:bg-[var(--bg-hover)] text-[var(--text-primary)] border border-[var(--border-subtle)] px-4 py-2 rounded-lg font-semibold flex items-center gap-2 transition-all cursor-pointer disabled:opacity-50"
           >
             {exporting
               ? <><Loader2 size={16} className="animate-spin" /> Generating PDF...</>
@@ -136,29 +140,15 @@ export default function IssuesPage() {
 
       {/* Summary Strip */}
       {summary && (
-        <div style={{
-          display: 'flex', gap: 16, marginBottom: 16,
-          fontSize: 13, color: '#888'
-        }}>
+        <div className="flex gap-4 mb-4 text-[13px] text-[var(--text-muted)]">
           <span>
-            <span style={{ color: '#eee', fontWeight: 500 }}>
-              {summary.open}
-            </span> open issues
+            <span className="text-[var(--text-primary)] font-medium">{summary.open}</span> open issues
           </span>
-          <span style={{ color: '#444' }}>|</span>
-          <span>
-            <span style={{ color: '#e53935' }}>{summary.by_severity.critical}</span>
-            {' '}critical
-          </span>
-          <span>
-            <span style={{ color: '#f97316' }}>{summary.by_severity.high}</span>
-            {' '}high
-          </span>
-          <span>
-            <span style={{ color: '#eab308' }}>{summary.by_severity.medium}</span>
-            {' '}medium
-          </span>
-          <span style={{ marginLeft: 'auto', color: '#444', fontSize: 12 }}>
+          <span className="text-[var(--border-subtle)]">|</span>
+          <span><span className="text-[var(--fail)]">{summary.by_severity.critical}</span> critical</span>
+          <span><span className="text-[var(--amber)]">{summary.by_severity.high}</span> high</span>
+          <span><span className="text-[var(--warning)]">{summary.by_severity.medium}</span> medium</span>
+          <span className="ml-auto text-[var(--text-muted)] text-xs">
             Sorted by severity · detected by Vision Agent
           </span>
         </div>
@@ -167,118 +157,76 @@ export default function IssuesPage() {
       <div className="flex-1 overflow-y-auto min-h-0">
         {isLoading ? (
           <div className="flex items-center justify-center h-40">
-            <Loader2 size={32} className="animate-spin text-white/20" />
+            <Loader2 size={32} className="animate-spin text-[var(--text-muted)]" />
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 pb-10">
             {sortedIssues.map((issue) => {
               const sev = SEVERITY[issue.severity as keyof typeof SEVERITY] || SEVERITY.medium;
               const isNew = issue.id === newIssueId;
-              
+
               // Measurement Color Logic
-              let measuredColor = '#22c55e'; // Green if within tolerance
+              let measuredColor = 'var(--pass)'; // within tolerance
               if (issue.measured_value && issue.expected_value) {
                  const mVal = parseFloat(issue.measured_value.replace(/[^0-9.-]+/g,""));
                  const eVal = parseFloat(issue.expected_value.replace(/[^0-9.-]+/g,""));
                  if (!isNaN(mVal) && !isNaN(eVal) && mVal > eVal) {
                     measuredColor = sev.deviation;
                  } else if (issue.deviation_pct && issue.deviation_pct > 0) {
-                    // Fallback for deviation > 0
                     measuredColor = sev.deviation;
                  }
               }
 
               return (
-                <div 
+                <div
                   key={issue.id}
+                  className="relative rounded-xl p-6 bg-[var(--bg-surface)] border border-[var(--border-subtle)]"
                   style={{
-                    background: '#12121A',
-                    borderRadius: 12,
-                    padding: 24,
-                    position: 'relative',
-                    border: `1px solid ${sev.card_tint !== 'transparent' ? sev.card_tint : 'rgba(255,255,255,0.1)'}`,
-                    borderLeft: isNew
-                      ? '3px solid #00e5c0'
-                      : `3px solid ${sev.card_border}`,
+                    borderLeft: isNew ? '3px solid var(--cyan)' : `3px solid ${sev.card_border}`,
                     transition: 'border-left-color 1.5s ease',
-                    cursor: 'default'
                   }}
                 >
-                  <div 
+                  <div
                     onClick={() => setSelectedIssueId(issue.id)}
                     className="cursor-pointer"
                   >
                     <div className="flex justify-between items-start mb-4">
                       <div>
-                        <span style={{
-                          background: sev.badge_bg,
-                          color: sev.badge_text,
-                          border: `1px solid ${sev.badge_border}`,
-                          fontSize: 10,
-                          fontWeight: 'bold',
-                          padding: '4px 10px',
-                          borderRadius: 999,
-                          textTransform: 'uppercase',
-                          letterSpacing: 1
-                        }}>
+                        <span
+                          className="text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full"
+                          style={{ background: sev.badge_bg, color: sev.badge_text, border: `1px solid ${sev.badge_border}` }}
+                        >
                           {issue.severity}
                         </span>
-                        <h3 className="text-white text-lg font-semibold mt-3">{issue.issue_type}</h3>
-                        <div className="text-white/40 text-sm">Zone {issue.zone_code}</div>
+                        <h3 className="text-[var(--text-primary)] text-lg font-semibold mt-3">{issue.issue_type}</h3>
+                        <div className="text-[var(--text-muted)] text-sm">Zone {issue.zone_code}</div>
                       </div>
-                      <div className="flex items-center text-xs" style={{ color: '#555' }}>
+                      <div className="flex items-center text-xs text-[var(--text-muted)]">
                         <Clock size={12} className="mr-1" />
                         <span>{issueTime(issue.created_at)}</span>
                       </div>
                     </div>
 
-                    <div style={{
-                      background: 'rgba(255,255,255,0.03)',
-                      borderRadius: 6,
-                      padding: '10px 12px',
-                      fontSize: 13,
-                      color: '#bbb',
-                      lineHeight: 1.6,
-                      margin: '10px 0'
-                    }}>
+                    <div className="bg-[var(--bg-elevated)] rounded-md px-3 py-2.5 text-[13px] text-[var(--text-secondary)] leading-relaxed my-2.5">
                       {issue.description}
                     </div>
 
-                    <div style={{
-                      display: 'grid',
-                      gridTemplateColumns: 'repeat(4, 1fr)',
-                      gap: 0,
-                      borderTop: '0.5px solid #1e1e1e',
-                      marginTop: 10,
-                      paddingTop: 10,
-                      marginBottom: 16
-                    }}>
+                    <div className="grid grid-cols-4 border-t border-[var(--border-subtle)] mt-2.5 pt-2.5 mb-4">
                       {[
-                        { label: 'DEVIATION', value: issue.deviation_pct ? `${issue.deviation_pct}%` : '-',
-                          color: '#e53935' },
-                        { label: 'MEASURED', value: issue.measured_value || '-',
-                          color: measuredColor },
-                        { label: 'EXPECTED', value: issue.expected_value || '-',
-                          color: '#22c55e' },
-                        { label: 'WORKER', value: issue.worker_id || '-',
-                          color: '#378add', clickable: true }
+                        { label: 'DEVIATION', value: issue.deviation_pct ? `${issue.deviation_pct}%` : '-', color: 'var(--fail)' },
+                        { label: 'MEASURED', value: issue.measured_value || '-', color: measuredColor },
+                        { label: 'EXPECTED', value: issue.expected_value || '-', color: 'var(--pass)' },
+                        { label: 'WORKER', value: issue.worker_id || '-', color: 'var(--cyan)', clickable: true }
                       ].map(col => (
-                        <div key={col.label} style={{ padding: '0 0 0 0' }}>
-                          <div style={{ fontSize: 10, color: '#444',
-                                        letterSpacing: '0.5px', marginBottom: 3 }}>
-                            {col.label}
-                          </div>
-                          <div style={{ fontSize: 13, fontWeight: 500, color: col.color }}>
+                        <div key={col.label}>
+                          <div className="text-[10px] text-[var(--text-muted)] tracking-wide mb-0.5">{col.label}</div>
+                          <div className="text-[13px] font-medium" style={{ color: col.color }}>
                             {col.clickable && issue.worker_id ? (
-                               <a 
+                               <a
                                 href={`/workers/${issue.worker_id}`}
                                 onClick={(e) => e.stopPropagation()}
-                                style={{
-                                  color: '#378add', cursor: 'pointer', fontSize: 13,
-                                  fontWeight: 500, textDecoration: 'none'
-                                }}
-                                onMouseEnter={e => e.currentTarget.style.textDecoration = 'underline'}
-                                onMouseLeave={e => e.currentTarget.style.textDecoration = 'none'}
+                                className="hover:underline"
+                                style={{ color: 'var(--cyan)' }}
                               >
                                 {col.value}
                               </a>
@@ -294,20 +242,15 @@ export default function IssuesPage() {
                   {/* Actions */}
                   {!resolveMode && !escalateMode && (
                     <div className="flex gap-3 mt-4">
-                      <button 
+                      <button
                         onClick={(e) => { e.stopPropagation(); setResolveMode(issue.id); }}
-                        className="flex-1 py-2.5 rounded-lg transition-colors flex items-center justify-center gap-2 cursor-pointer font-semibold"
-                        style={{
-                          background: '#0d2a0d',
-                          border: '0.5px solid #1a5a1a',
-                          color: '#22c55e'
-                        }}
+                        className="flex-1 py-2.5 rounded-lg transition-colors flex items-center justify-center gap-2 cursor-pointer font-semibold bg-[var(--pass-dim)] border border-[var(--pass)]/30 text-[var(--pass)]"
                       >
                         <CheckCircle size={16} /> Resolve
                       </button>
-                      <button 
+                      <button
                         onClick={(e) => { e.stopPropagation(); setEscalateMode(issue.id); }}
-                        className="flex-1 bg-transparent hover:bg-white/5 text-white font-semibold py-2.5 rounded-lg transition-colors border border-[#2a2a2a] flex items-center justify-center gap-2 cursor-pointer"
+                        className="flex-1 bg-transparent hover:bg-[var(--bg-hover)] text-[var(--text-primary)] font-semibold py-2.5 rounded-lg transition-colors border border-[var(--border-subtle)] flex items-center justify-center gap-2 cursor-pointer"
                       >
                         <ArrowUpRight size={16} /> Escalate
                       </button>
@@ -316,32 +259,20 @@ export default function IssuesPage() {
 
                   {/* Inline Resolve Modal */}
                   {resolveMode === issue.id && (
-                    <div style={{
-                      marginTop: 12, padding: 12,
-                      background: '#0d1a0d',
-                      border: '0.5px solid #1a4a1a',
-                      borderRadius: 8
-                    }}>
+                    <div className="mt-3 p-3 bg-[var(--pass-dim)] border border-[var(--pass)]/30 rounded-lg">
                       <textarea
                         placeholder="Describe how this was resolved (required)..."
                         value={resolutionNote}
                         onChange={e => setResolutionNote(e.target.value)}
-                        style={{
-                          width: '100%', minHeight: 60,
-                          background: '#111', border: '0.5px solid #222',
-                          borderRadius: 6, color: '#eee', fontSize: 12,
-                          padding: 8, resize: 'vertical'
-                        }}
+                        className="w-full min-h-[60px] bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-md text-[var(--text-primary)] text-xs p-2 resize-y"
                       />
-                      <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                      <div className="flex gap-2 mt-2">
                         <button
                           disabled={resolutionNote.length < 10 || resolving}
                           onClick={() => onResolveConfirm(issue.id)}
+                          className="rounded-md px-3.5 py-1.5 text-xs border border-[var(--pass)]/50 text-[var(--pass)]"
                           style={{
-                            background: resolutionNote.length >= 10 ? '#0d3d0d' : '#111',
-                            border: '0.5px solid #1a5a1a',
-                            color: '#22c55e', borderRadius: 6,
-                            padding: '5px 14px', fontSize: 12, cursor: 'pointer',
+                            background: resolutionNote.length >= 10 ? 'var(--pass-dim)' : 'var(--bg-elevated)',
                             opacity: resolutionNote.length >= 10 ? 1 : 0.5
                           }}
                         >
@@ -349,12 +280,7 @@ export default function IssuesPage() {
                         </button>
                         <button
                           onClick={() => { setResolveMode(null); setResolutionNote(''); }}
-                          style={{
-                            background: 'transparent',
-                            border: '0.5px solid #2a2a2a',
-                            color: '#666', borderRadius: 6,
-                            padding: '5px 14px', fontSize: 12, cursor: 'pointer'
-                          }}
+                          className="rounded-md px-3.5 py-1.5 text-xs border border-[var(--border-subtle)] text-[var(--text-muted)]"
                         >
                           Cancel
                         </button>
@@ -364,23 +290,13 @@ export default function IssuesPage() {
 
                   {/* Inline Escalate Modal */}
                   {escalateMode === issue.id && (
-                    <div style={{
-                      marginTop: 12, padding: 12,
-                      background: '#1a0e00',
-                      border: '0.5px solid #4a2a00',
-                      borderRadius: 8
-                    }}>
-                      <div style={{ fontSize: 12, color: '#888', marginBottom: 8 }}>
-                        Escalate to:
-                      </div>
-                      <select 
+                    <div className="mt-3 p-3 bg-[var(--amber-dim)] border border-[var(--amber)]/30 rounded-lg">
+                      <div className="text-xs text-[var(--text-muted)] mb-2">Escalate to:</div>
+                      <select
                         value={escalateRole}
                         onChange={(e) => setEscalateRole(e.target.value)}
-                        style={{
-                        width: '100%', background: '#111',
-                        border: '0.5px solid #333', color: '#eee',
-                        borderRadius: 6, padding: '6px 8px', fontSize: 12
-                      }}>
+                        className="w-full bg-[var(--bg-elevated)] border border-[var(--border-subtle)] text-[var(--text-primary)] rounded-md px-2 py-1.5 text-xs"
+                      >
                         <option value="site_manager">Site Manager</option>
                         <option value="safety_officer">Safety Officer</option>
                         <option value="project_director">Project Director</option>
@@ -389,29 +305,20 @@ export default function IssuesPage() {
                         placeholder="Escalation note (optional)..."
                         value={escalationNote}
                         onChange={(e) => setEscalationNote(e.target.value)}
-                        style={{ width: '100%', marginTop: 8, minHeight: 50,
-                                 background: '#111', border: '0.5px solid #222',
-                                 borderRadius: 6, color: '#eee',
-                                 fontSize: 12, padding: 8, resize: 'vertical' }}
+                        className="w-full mt-2 min-h-[50px] bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-md text-[var(--text-primary)] text-xs p-2 resize-y"
                       />
-                      <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-                        <button 
+                      <div className="flex gap-2 mt-2">
+                        <button
                           onClick={() => onEscalateConfirm(issue.id)}
                           disabled={escalating}
-                          style={{
-                            background: '#1a0e00', border: '0.5px solid #f97316',
-                            color: '#f97316', borderRadius: 6,
-                            padding: '5px 14px', fontSize: 12, cursor: 'pointer',
-                            opacity: escalating ? 0.5 : 1
-                          }}>
+                          className="rounded-md px-3.5 py-1.5 text-xs border border-[var(--amber)]/60 text-[var(--amber)] bg-[var(--amber-dim)] disabled:opacity-50"
+                        >
                           {escalating ? 'Escalating...' : 'Confirm escalate'}
                         </button>
-                        <button onClick={() => { setEscalateMode(null); setEscalationNote(''); }}
-                          style={{
-                            background: 'transparent', border: '0.5px solid #2a2a2a',
-                            color: '#666', borderRadius: 6,
-                            padding: '5px 14px', fontSize: 12, cursor: 'pointer'
-                          }}>
+                        <button
+                          onClick={() => { setEscalateMode(null); setEscalationNote(''); }}
+                          className="rounded-md px-3.5 py-1.5 text-xs border border-[var(--border-subtle)] text-[var(--text-muted)]"
+                        >
                           Cancel
                         </button>
                       </div>
@@ -421,9 +328,9 @@ export default function IssuesPage() {
                 </div>
               );
             })}
-            
+
             {sortedIssues.length === 0 && !isLoading && (
-              <div className="col-span-full py-20 text-center text-white/40">
+              <div className="col-span-full py-20 text-center text-[var(--text-muted)]">
                 No issues match the selected filter.
               </div>
             )}
@@ -431,13 +338,13 @@ export default function IssuesPage() {
         )}
       </div>
 
-      <IssueDetailPanel 
+      <IssueDetailPanel
         issue={issues.find(i => i.id === selectedIssueId) || null}
         isOpen={!!selectedIssueId}
         onClose={() => setSelectedIssueId(null)}
-        onResolve={resolveIssue}
-        onEscalate={escalateIssue}
+        onResolve={(id, note) => resolveIssue(id, note, user?.id || user?.email)}
+        onEscalate={(id, role, note) => escalateIssue(id, role, note, user?.id || user?.email)}
       />
     </div>
-  ); 
+  );
 }

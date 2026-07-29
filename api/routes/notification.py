@@ -3,9 +3,14 @@ from pydantic import BaseModel
 import sys
 import os
 import uuid
+import json
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../../")))
 from agents.notification.router import NotificationRouter, NotificationEvent
+from db import get_db
+from models.notification import NotificationAudit
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 
 router = APIRouter(prefix="/api/v1/notification", tags=["Notification Agent (Agent 9)"])
 
@@ -24,19 +29,34 @@ async def dispatch_notification(event: NotificationEvent):
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/active")
-async def get_active_notifications():
+async def get_active_notifications(db: AsyncSession = Depends(get_db)):
     """
     Retrieves the latest 20 notifications from the audit log.
     """
-    import asyncpg
-    uri = os.getenv("POSTGRES_URI", "postgresql://atw_user:atw_dev_password@localhost:5432/askthewall")
     try:
-        conn = await asyncpg.connect(uri)
-        rows = await conn.fetch("SELECT * FROM notification_audit ORDER BY created_at DESC LIMIT 20")
-        await conn.close()
-        
-        # Convert datetime to ISO string
-        return {"status": "success", "data": [{**dict(r), "created_at": r["created_at"].isoformat()} for r in rows]}
+        result = await db.execute(
+            select(NotificationAudit).order_by(NotificationAudit.created_at.desc()).limit(20)
+        )
+        rows = result.scalars().all()
+        return {
+            "status": "success",
+            "data": [
+                {
+                    "id": r.id,
+                    "notification_id": r.notification_id,
+                    "incident_id": r.incident_id,
+                    "severity": r.severity,
+                    "zone_id": r.zone_id,
+                    "asset_id": r.asset_id,
+                    "channels_attempted": json.loads(r.channels_attempted) if r.channels_attempted else [],
+                    "channels_delivered": json.loads(r.channels_delivered) if r.channels_delivered else [],
+                    "dispatch_results": json.loads(r.dispatch_results) if r.dispatch_results else [],
+                    "mock_channels": json.loads(r.mock_channels) if r.mock_channels else [],
+                    "created_at": r.created_at.isoformat() if r.created_at else None,
+                }
+                for r in rows
+            ],
+        }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

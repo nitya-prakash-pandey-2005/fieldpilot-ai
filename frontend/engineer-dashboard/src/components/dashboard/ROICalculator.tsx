@@ -1,25 +1,50 @@
 "use client";
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { GlassCard } from '../ui/GlassCard';
+import { LiveIndicator } from '../ui/LiveIndicator';
 import { Calculator, DollarSign, Clock, ShieldAlert, Hammer } from 'lucide-react';
 
+// Industry baseline assumptions this projection is built on (see
+// system_prompt.md Section 2.1's cited figures: rework 5-15% of project
+// cost, RFI response time 6-10 working days). This is a forward-looking
+// "what would this save you" tool by nature — it can't be purely "live"
+// data the way the rest of the dashboard is, since it's estimating a
+// hypothetical project's future, not reporting a past measurement. The
+// "Actual results so far" panel below it IS live, from real resolved
+// incidents, and shown alongside so the two are never confused.
 const baseMetrics = {
   rfisPerWorkerPerMonth: 0.023,
   costPerRFI: 4000,
   hoursPerRFI: 7.2,
-  reworkCostPct: 0.12
+  reworkPerWorkerPerMonth: 0.0067,  // derived from rework typically running ~30% of RFI incidence
+  platformCostPerWorkerPerMonth: 28,  // assumed platform licensing cost — makes the ROI ratio below computed, not a fixed marketing number
 };
 
 export function ROICalculator() {
   const [workers, setWorkers] = useState(200);
   const [months, setMonths] = useState(18);
+  const [actual, setActual] = useState<{ cost: number; incidents: number; rework: number } | null>(null);
+
+  useEffect(() => {
+    const API = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+    fetch(`${API}/api/v1/learning/stats`)
+      .then(r => r.ok ? r.json() : Promise.reject())
+      .then(stats => {
+        setActual({
+          cost: stats.total_cost_avoided_usd || 0,
+          incidents: stats.total_incidents_learned || 0,
+          rework: stats.rework_prevented_count || 0,
+        });
+      })
+      .catch(() => setActual(null));
+  }, []);
 
   const calculate = (w: number, m: number) => {
     const rfis = Math.round(w * m * baseMetrics.rfisPerWorkerPerMonth);
     const cost = Math.round(w * m * baseMetrics.rfisPerWorkerPerMonth * baseMetrics.costPerRFI);
     const hours = Math.round(w * m * baseMetrics.rfisPerWorkerPerMonth * baseMetrics.hoursPerRFI);
-    const rework = Math.round(w * m * 0.0067); // roughly deriving 24 from 200*18
+    const rework = Math.round(w * m * baseMetrics.reworkPerWorkerPerMonth);
     return { rfis, cost, hours, rework };
   };
 
@@ -116,9 +141,27 @@ export function ROICalculator() {
           </div>
           
           <div className="mt-6 p-4 bg-[var(--pass-dim)] rounded-lg border border-[var(--pass)]/30 flex items-center justify-between">
-            <span className="text-sm font-bold text-[var(--pass)] tracking-wide">ROI Ratio: 12:1</span>
-            <span className="text-xs text-[var(--pass)] opacity-80 font-mono">"For every $1 invested, save $12 in rework costs"</span>
+            <span className="text-sm font-bold text-[var(--pass)] tracking-wide">
+              ROI Ratio: {Math.max(1, Math.round(results.cost / (workers * months * baseMetrics.platformCostPerWorkerPerMonth)))}:1
+            </span>
+            <span className="text-xs text-[var(--pass)] opacity-80 font-mono">
+              For every $1 in platform cost, save ~${Math.max(1, Math.round(results.cost / (workers * months * baseMetrics.platformCostPerWorkerPerMonth)))} in avoided rework
+            </span>
           </div>
+
+          {actual && (
+            <div className="mt-4 p-4 bg-[var(--bg-elevated)] rounded-lg border border-[var(--cyan)]/20">
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-[10px] font-bold text-[var(--cyan)] tracking-widest uppercase">Actual results so far</span>
+                <LiveIndicator isLive={true} />
+              </div>
+              <div className="flex gap-6 text-xs text-[var(--text-secondary)]">
+                <span><b className="text-[var(--text-primary)] font-mono">${actual.cost.toLocaleString()}</b> saved</span>
+                <span><b className="text-[var(--text-primary)] font-mono">{actual.incidents}</b> incidents resolved</span>
+                <span><b className="text-[var(--text-primary)] font-mono">{actual.rework}</b> rework events prevented</span>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </GlassCard>

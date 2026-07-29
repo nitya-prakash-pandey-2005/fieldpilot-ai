@@ -9,8 +9,14 @@ from utils.llm_client import get_llm_response
 from sentence_transformers import SentenceTransformer
 from qdrant_client import QdrantClient
 from qdrant_client.models import Distance, VectorParams
+from agents.drawing.indexer import EMBEDDING_MODEL, EMBEDDING_DIM, collection_name
 
-embedder = SentenceTransformer('all-MiniLM-L6-v2')
+# Standardized on the SAME embedding model + collection-naming scheme as
+# agents/drawing/indexer.py (previously this used all-MiniLM-L6-v2 against
+# "project_{project_id}", while the drawing indexer used bge-small-en-v1.5
+# against a single global "drawings_vectors" — two RAG paths that never saw
+# each other's data despite sharing a Qdrant instance).
+embedder = SentenceTransformer(EMBEDDING_MODEL)
 client = QdrantClient(url=os.getenv("QDRANT_URL", "http://localhost:6333"))
 
 class RetrievalResult(BaseModel):
@@ -25,25 +31,30 @@ class RetrievalBackend(Protocol):
 
 class QdrantRetrieval:
     async def search(self, query: str, project_id: str, top_k: int) -> List[RetrievalResult]:
+        name = collection_name(project_id)
         try:
             client.create_collection(
-                collection_name=f"project_{project_id}",
+                collection_name=name,
                 vectors_config=VectorParams(
-                    size=384,
+                    size=EMBEDDING_DIM,
                     distance=Distance.COSINE
                 )
             )
         except Exception:
             pass  # Already exists
-        
+
         query_vector = embedder.encode(query).tolist()
-        
-        results = client.search(
-            collection_name=f"project_{project_id}",
-            query_vector=query_vector,
+
+        # QdrantClient.search() was removed in newer qdrant-client versions
+        # in favor of query_points(), which wraps results in a
+        # QueryResponse (.points) instead of returning a bare list.
+        response = client.query_points(
+            collection_name=name,
+            query=query_vector,
             limit=top_k
         )
-        
+        results = response.points
+
         # If collection empty, return mock or handle properly
         if not results:
             print("No results found in Qdrant.")
@@ -92,13 +103,31 @@ class MemoryRequest(BaseModel):
 
 class MemoryRetriever:
     def __init__(self):
-        backend_type = os.getenv("RETRIEVAL_BACKEND", "mock").lower()
+        # Qdrant is already provisioned (docker-compose.yml) and populated
+        # by drawing ingestion, so it's the real default now rather than a
+        # hardcoded mock that silently shadowed it. Set RETRIEVAL_BACKEND=mock
+        # to force the mock path (e.g. offline demo without Qdrant running).
+        backend_type = os.getenv("RETRIEVAL_BACKEND", "qdrant").lower()
         self.retrieval_backend: RetrievalBackend = QdrantRetrieval() if backend_type == "qdrant" else MockRetrieval()
 
     async def answer_query(self, req: MemoryRequest):
         # 1. Retrieve Context
         results = await self.retrieval_backend.search(req.query, req.project_id, top_k=5)
-        
+
+        # No real LLM configured for this request (no GROQ_API_KEY/LLM_BACKEND
+        # set and no per-request Gemini key) — get_llm_response's "mock"
+        # branch returns a fixed RFI-shaped payload meant for the Predictive
+        # RFI agent, which would silently mismatch this endpoint's schema.
+        # Skip the LLM entirely and return the REAL retrieved Qdrant matches
+        # ungrounded-by-an-LLM instead of a canned narrative — no answer is
+        # synthesized, but nothing is fabricated either.
+        llm_configured = bool(req.api_key) or os.getenv("LLM_BACKEND", "mock").lower() != "mock"
+        if not llm_configured:
+            resp = self._ungrounded_response(results)
+            if results:
+                resp["caution"] = "No LLM configured (set GROQ_API_KEY) — showing raw matching passages instead of a synthesized answer."
+            return resp
+
         # Format the context for the LLM
         context_str = "\n\n".join([
             f"Source: {res.source} (Score: {res.score})\nText: {res.text}\nMetadata: {json.dumps(res.metadata)}"
@@ -144,24 +173,10 @@ class MemoryRetriever:
         try:
             response_text = get_llm_response(system_prompt, user_prompt, temperature=0.1, api_key=req.api_key)
         except Exception as e:
-            print(f"LLM failed in MemoryRetriever: {e}. Falling back to mock memory.")
-            return {
-                "answer": "Based on the retrieved context, Engineer Sarah Chen approved alternative east-wall conduit routing in Zone B3 during the MEP coordination meeting on 2024-06-04.",
-                "confidence": 0.94,
-                "evidence": [
-                    {
-                        "source_type": "meeting_minutes",
-                        "source_id": "meeting_minutes_2024_06_04.pdf",
-                        "excerpt": "Engineer Sarah Chen approved alternative east-wall conduit routing in Zone B3",
-                        "date": "2024-06-04",
-                        "approved_by": "Sarah Chen",
-                        "document_url": None,
-                        "page": 3
-                    }
-                ],
-                "related_drawing": "M-045 Revision 2",
-                "caution": None
-            }
+            print(f"LLM failed in MemoryRetriever: {e}. Falling back to raw retrieved matches.")
+            resp = self._ungrounded_response(results)
+            resp["caution"] = f"AI synthesis unavailable ({e}) — showing raw matching passages instead."
+            return resp
 
         # 4. Parse Output safely
         try:
@@ -173,13 +188,46 @@ class MemoryRetriever:
             if cleaned_text.endswith("```"):
                 cleaned_text = cleaned_text[:-3]
             cleaned_text = cleaned_text.strip()
-            return json.loads(cleaned_text)
+            parsed = json.loads(cleaned_text)
+            if not isinstance(parsed, dict) or "answer" not in parsed:
+                raise json.JSONDecodeError("unexpected shape", cleaned_text, 0)
+            return parsed
         except json.JSONDecodeError:
-            # Fallback for hackathon safety if LLM fails format
+            resp = self._ungrounded_response(results)
+            resp["caution"] = "AI response was malformed — showing raw matching passages instead."
+            return resp
+
+    def _ungrounded_response(self, results: List[RetrievalResult]) -> dict:
+        """
+        Builds a response straight from real Qdrant matches with no LLM
+        synthesis layered on top — used whenever no LLM is configured, the
+        LLM call fails, or its output can't be parsed. Never fabricates a
+        narrative; `answer` stays null so the frontend can render this
+        distinctly from a real synthesized answer.
+        """
+        if not results:
             return {
-                "answer": "Failed to parse LLM response.",
+                "answer": None,
                 "confidence": 0.0,
                 "evidence": [],
                 "related_drawing": None,
-                "caution": "System Error"
+                "caution": "No matching documents found in project memory for this query.",
             }
+        return {
+            "answer": None,
+            "confidence": round(results[0].score, 2),
+            "evidence": [
+                {
+                    "source_type": r.metadata.get("source_type", "document"),
+                    "source_id": r.source,
+                    "excerpt": r.text[:400],
+                    "date": r.metadata.get("date"),
+                    "approved_by": r.metadata.get("approved_by"),
+                    "document_url": None,
+                    "page": r.metadata.get("page"),
+                }
+                for r in results
+            ],
+            "related_drawing": None,
+            "caution": None,
+        }

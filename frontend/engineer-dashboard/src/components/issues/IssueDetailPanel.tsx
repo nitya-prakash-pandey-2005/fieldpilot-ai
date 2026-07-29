@@ -15,7 +15,7 @@ interface IssueDetailPanelProps {
 export default function IssueDetailPanel({ issue, isOpen, onClose, onResolve, onEscalate }: IssueDetailPanelProps) {
   const [resolveNote, setResolveNote] = React.useState('');
   const [escalateNote, setEscalateNote] = React.useState('');
-  const [escalateRole, setEscalateRole] = React.useState('Project Manager');
+  const [escalateRole, setEscalateRole] = React.useState('site_manager');
   const [isResolving, setIsResolving] = React.useState(false);
   const [isEscalating, setIsEscalating] = React.useState(false);
 
@@ -92,7 +92,7 @@ export default function IssueDetailPanel({ issue, isOpen, onClose, onResolve, on
           <div className="grid grid-cols-2 gap-4">
             <div className="bg-white/5 p-4 rounded-xl border border-white/5">
               <div className="text-xs uppercase tracking-widest text-white/40 mb-1">Measured Value</div>
-              <div className={`text-xl font-mono ${issue.deviation_pct && issue.deviation_pct > 10 ? 'text-atw-red' : 'text-white'}`}>
+              <div className={`text-xl font-mono ${issue.deviation_pct && issue.deviation_pct > 10 ? 'text-atw-fail' : 'text-white'}`}>
                 {issue.measured_value || 'N/A'}
               </div>
             </div>
@@ -184,10 +184,13 @@ export default function IssueDetailPanel({ issue, isOpen, onClose, onResolve, on
                   value={escalateRole}
                   onChange={(e) => setEscalateRole(e.target.value)}
                 >
-                  <option value="Project Manager">Project Manager</option>
-                  <option value="Lead Engineer">Lead Engineer</option>
-                  <option value="Safety Officer">Safety Officer</option>
-                  <option value="Quality Control">Quality Control</option>
+                  {/* Same 3 values as the inline modal in issues/page.tsx —
+                      previously these two surfaces used different value
+                      sets ("Project Manager" vs "site_manager") for the
+                      same free-text escalate_to_role backend field. */}
+                  <option value="site_manager">Site Manager</option>
+                  <option value="safety_officer">Safety Officer</option>
+                  <option value="project_director">Project Director</option>
                 </select>
 
                 <textarea 

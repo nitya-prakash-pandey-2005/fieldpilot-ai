@@ -1,0 +1,58 @@
+{
+  "timestamp": "2026-07-25T15:00:15.377925Z",
+  "tests": {
+    "onnx": {
+      "timestamp": "2026-07-25T15:00:22.647264Z",
+      "onnx_path": "D:\\Kaya IIT Hackathon\\fieldpilot-ai\\models\\weights\\yolo11n-pose-int8.onnx",
+      "pt_path": "D:\\Kaya IIT Hackathon\\fieldpilot-ai\\models\\weights\\yolo11n-pose.pt",
+      "frames_tested": 5,
+      "matches": 5,
+      "accuracy": 1.0,
+      "pass": true,
+      "frames": [
+        {
+          "frame": 1,
+          "pytorch_top1": "none",
+          "pytorch_conf": 0.0,
+          "onnx_top1": "none",
+          "onnx_conf": 0.057,
+          "match": true
+        },
+        {
+          "frame": 2,
+          "pytorch_top1": "none",
+          "pytorch_conf": 0.0,
+          "onnx_top1": "none",
+          "onnx_conf": 0.033,
+          "match": true
+        },
+        {
+          "frame": 3,
+          "pytorch_top1": "person",
+          "pytorch_conf": 0.819,
+          "onnx_top1": "person",
+          "onnx_conf": 0.514,
+          "match": true
+        },
+        {
+          "frame": 4,
+          "pytorch_top1": "person",
+          "pytorch_conf": 0.919,
+          "onnx_top1": "person",
+          "onnx_conf": 0.791,
+          "match": true
+        },
+        {
+          "frame": 5,
+          "pytorch_top1": "none",
+          "pytorch_conf": 0.0,
+          "onnx_top1": "none",
+          "onnx_conf": 0.033,
+          "match": true
+        }
+      ],
+      "mode": "onnx"
+    }
+  },
+  "overall_pass": true
+}

@@ -1,0 +1,43 @@
+{
+  "timestamp": "2026-07-25T12:47:55.444101Z",
+  "tests": {
+    "ppe": {
+      "mode": "ppe",
+      "accuracy": 0.5,
+      "pass": true,
+      "cases": [
+        {
+          "test": "hardhat_present",
+          "expected_hardhat": true,
+          "detected_hardhat": true,
+          "detected_vest": true,
+          "detected_gloves": true,
+          "detected_glasses": false,
+          "detected_boots": false,
+          "ppe_score": 0.6,
+          "violations": [
+            "NO GLASSES",
+            "NO BOOTS"
+          ],
+          "pass": true
+        },
+        {
+          "test": "hardhat_absent",
+          "expected_hardhat": false,
+          "detected_hardhat": true,
+          "detected_vest": true,
+          "detected_gloves": true,
+          "detected_glasses": false,
+          "detected_boots": false,
+          "ppe_score": 0.6,
+          "violations": [
+            "NO GLASSES",
+            "NO BOOTS"
+          ],
+          "pass": false
+        }
+      ]
+    }
+  },
+  "overall_pass": true
+}

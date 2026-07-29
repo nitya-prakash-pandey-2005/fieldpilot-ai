@@ -1,17 +1,19 @@
 "use client";
 
-import React from 'react';
+import React, { useState } from 'react';
 import { GlassCard } from '../ui/GlassCard';
 import { useAPIData } from '@/hooks/useAPIData';
+import { DraftRFIModal } from './DraftRFIModal';
 
 const DEMO_RFIS = [
-  { id: "RFI-PRED-102", title: "Clash between HVAC duct and sprinkler main in Corridor B", confidence: 0.94, impact: "High", action: "Review Model", zone: "Zone B3" },
+  { id: "RFI-PRED-102", title: "Clash between HVAC duct and sprinkler main in Corridor B", confidence: 0.94, impact: "High", action: "Draft RFI", zone: "Zone B3" },
   { id: "RFI-PRED-103", title: "Missing dimensions for embed plates on Grid Line 4", confidence: 0.72, impact: "Medium", action: "Draft RFI", zone: "Zone D4" },
-  { id: "RFI-PRED-104", title: "Inconsistent fire rating specs for Door 120", confidence: 0.55, impact: "Low", action: "Check Spec", zone: "Zone A12" },
+  { id: "RFI-PRED-104", title: "Inconsistent fire rating specs for Door 120", confidence: 0.55, impact: "Low", action: "Draft RFI", zone: "Zone A12" },
 ];
 
 export function PredictedRFIPanel() {
   const { data: rfis } = useAPIData('/api/v1/planning/predictions', DEMO_RFIS);
+  const [selectedRFI, setSelectedRFI] = useState<any>(null);
   
   // Real-time timestamp mockup
   const [updateTime, setUpdateTime] = React.useState(0);
@@ -21,6 +23,7 @@ export function PredictedRFIPanel() {
   }, []);
 
   return (
+    <>
     <GlassCard className="h-full flex flex-col" accentColor="var(--purple)">
       <div className="p-4 border-b border-[var(--border-subtle)] flex items-center justify-between">
         <h2 className="text-sm font-semibold tracking-wide text-[var(--text-primary)] uppercase">AI Predicted RFIs</h2>
@@ -75,7 +78,9 @@ export function PredictedRFIPanel() {
               }}>
                 {rfi.impact.toUpperCase()} IMPACT
               </span>
-              <button className="text-[10px] font-bold bg-[var(--bg-elevated)] border border-[var(--border-subtle)] px-2 py-1 rounded hover:bg-[var(--purple-dim)] hover:border-[var(--purple)] hover:text-[var(--purple)] transition-colors uppercase w-24 text-center">
+              <button 
+                onClick={() => setSelectedRFI(rfi)}
+                className="text-[10px] font-bold bg-[var(--bg-elevated)] border border-[var(--border-subtle)] px-2 py-1 rounded hover:bg-[var(--purple-dim)] hover:border-[var(--purple)] hover:text-[var(--purple)] transition-colors uppercase w-24 text-center">
                 {rfi.action}
               </button>
             </div>
@@ -83,5 +88,14 @@ export function PredictedRFIPanel() {
         )})}
       </div>
     </GlassCard>
+    
+    <DraftRFIModal 
+      isOpen={selectedRFI !== null}
+      onClose={() => setSelectedRFI(null)}
+      rfiId={selectedRFI?.id}
+      title={selectedRFI?.title}
+      zone={selectedRFI?.zone}
+    />
+    </>
   );
 }

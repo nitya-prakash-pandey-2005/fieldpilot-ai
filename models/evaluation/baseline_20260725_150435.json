@@ -1,0 +1,32 @@
+{
+  "timestamp": "2026-07-25T15:04:35.092244Z",
+  "tests": {
+    "attention": {
+      "mode": "attention",
+      "accuracy": 1.0,
+      "pass": true,
+      "cases": [
+        {
+          "test": "brief_glance_stays_passive",
+          "expected": "PASSIVE",
+          "got": "PASSIVE",
+          "pass": true
+        },
+        {
+          "test": "held_gaze_becomes_acknowledged",
+          "expected": "ACKNOWLEDGED",
+          "got": "ACKNOWLEDGED",
+          "pass": true
+        },
+        {
+          "test": "ignored_becomes_escalated",
+          "expected": "ESCALATED",
+          "got": "ESCALATED",
+          "pre_timeout_state": "PASSIVE",
+          "pass": true
+        }
+      ]
+    }
+  },
+  "overall_pass": true
+}

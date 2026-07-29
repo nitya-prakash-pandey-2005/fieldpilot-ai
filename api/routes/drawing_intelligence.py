@@ -17,28 +17,30 @@ parser = DocumentParser()
 indexer = DocumentIndexer()
 
 @router.post("/parse")
-async def parse_drawing(file: UploadFile = File(...), is_tabular: bool = False):
+async def parse_drawing(file: UploadFile = File(...), is_tabular: bool = False, project_id: str = "default-project"):
     # Save uploaded file to temp directory
     temp_dir = os.path.join(os.path.dirname(__file__), "temp")
     os.makedirs(temp_dir, exist_ok=True)
     temp_file_path = os.path.join(temp_dir, file.filename)
-    
+
     try:
         with open(temp_file_path, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
-            
+
         # Parse document using strategy pattern
         text = parser.parse(temp_file_path, is_tabular=is_tabular)
         if not text:
             raise HTTPException(status_code=500, detail="Failed to parse document.")
-            
+
         # Extract specs
         specs = await extract_dimensions_from_text(text, file.filename)
-        
-        # Index document chunks
+
+        # Index document chunks — scoped to project_id so it's retrievable
+        # through the Project Memory Q&A path (agents/memory/retriever.py),
+        # which searches the same project_{project_id}_drawings collection.
         doc_id = str(uuid.uuid4())
-        indexed_count = indexer.index_document(doc_id, text)
-        
+        indexed_count = indexer.index_document(doc_id, text, project_id=project_id, source=file.filename)
+
         return {
             "status": "success", 
             "filename": file.filename,
@@ -56,11 +58,13 @@ async def parse_drawing(file: UploadFile = File(...), is_tabular: bool = False):
 class IndexRequest(BaseModel):
     document_id: str
     text_chunks: List[str]
+    project_id: str = "default-project"
+    source: str | None = None
 
 @router.post("/index")
 async def index_drawing(req: IndexRequest):
     # Optional endpoint if we want to bypass the parser and manually index text
     doc_id = str(uuid.uuid4()) if req.document_id == "new" else req.document_id
     combined_text = "\n".join(req.text_chunks)
-    count = indexer.index_document(doc_id, combined_text)
+    count = indexer.index_document(doc_id, combined_text, project_id=req.project_id, source=req.source)
     return {"status": "success", "indexed_chunks": count, "document_id": doc_id}

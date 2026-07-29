@@ -2,46 +2,50 @@
 import { useState, useMemo } from 'react';
 import { Flame, ShieldAlert, Activity, HardHat, Bell, CheckCircle2, Clock } from 'lucide-react';
 import { useZones, getRiskLevel } from '@/hooks/useZones';
+import { useAuth } from '@/context/AuthContext';
 import { format, formatDistanceToNow } from 'date-fns';
 
+// Derived from the same CSS var tokens used across the rest of the app
+// (globals.css's @theme block) instead of raw hex, so this page no longer
+// breaks under the light theme toggle (Header.tsx's ThemeToggle) the way
+// hardcoded "#e53935 on text-white" combinations would.
 export const RISK_COLORS = {
   critical: {
-    score:       '#e53935',
-    badge_bg:    '#1a0505',
-    badge_text:  '#e53935',
-    badge_border:'#4a1010',
-    card_border: '#e53935',
-    bar:         '#e53935',
-    glow:        'rgba(229,57,53,0.08)'
+    score:       'var(--fail)',
+    badge_bg:    'var(--fail-dim)',
+    badge_text:  'var(--fail)',
+    badge_border:'color-mix(in srgb, var(--fail) 40%, transparent)',
+    card_border: 'var(--fail)',
+    bar:         'var(--fail)',
   },
   elevated: {
-    score:       '#f59e0b',
-    badge_bg:    '#1a1200',
-    badge_text:  '#f59e0b',
-    badge_border:'#4a3200',
-    card_border: '#f59e0b',
-    bar:         '#f59e0b',
-    glow:        'rgba(245,158,11,0.06)'
+    score:       'var(--amber)',
+    badge_bg:    'var(--amber-dim)',
+    badge_text:  'var(--amber)',
+    badge_border:'color-mix(in srgb, var(--amber) 40%, transparent)',
+    card_border: 'var(--amber)',
+    bar:         'var(--amber)',
   },
   normal: {
-    score:       '#22c55e',
-    badge_bg:    '#051a0a',
-    badge_text:  '#22c55e',
-    badge_border:'#0f4a20',
-    card_border: '#22c55e',
-    bar:         '#22c55e',
-    glow:        'transparent'
+    score:       'var(--pass)',
+    badge_bg:    'var(--pass-dim)',
+    badge_text:  'var(--pass)',
+    badge_border:'color-mix(in srgb, var(--pass) 40%, transparent)',
+    card_border: 'var(--pass)',
+    bar:         'var(--pass)',
   }
 };
 
 export default function ZonesPage() {
   const { zones, summary, lastUpdated, loading, error, connectionStatus } = useZones("default-project");
+  const { user } = useAuth();
   const [filter, setFilter] = useState<'all' | 'critical' | 'elevated' | 'normal'>('all');
   const [alertLoadingId, setAlertLoadingId] = useState<string | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [selectedZoneIdForIssues, setSelectedZoneIdForIssues] = useState<string | null>(null);
   const [zoneIssues, setZoneIssues] = useState<any[]>([]);
   const [issuesLoading, setIssuesLoading] = useState(false);
+  const [detailZoneId, setDetailZoneId] = useState<string | null>(null);
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
@@ -71,7 +75,8 @@ export default function ZonesPage() {
       const res = await fetch(`${BASE}/api/v1/zones/${zoneId}/alerts`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ triggered_by_user_id: 'current-user-123' })
+        // Attributed to the logged-in user (was hardcoded 'current-user-123').
+        body: JSON.stringify({ triggered_by_user_id: user?.id || user?.email || 'unknown' })
       });
       const data = await res.json();
       showToast(`Team alerted — ${data.notified_count} notified`);
@@ -87,62 +92,57 @@ export default function ZonesPage() {
     return zones.filter(zone => getRiskLevel(zone.risk_score) === filter);
   }, [zones, filter]);
 
-  const atRiskCount = zones.filter(z => getRiskLevel(z.risk_score) !== 'normal').length;
+  const detailZone = zones.find(z => z.id === detailZoneId) || null;
 
   return (
-    <div className="h-full p-8 flex flex-col min-h-0 bg-atw-bg relative">
+    <div className="h-full p-8 flex flex-col min-h-0 bg-[var(--bg-base)] relative">
       {/* Toast Notification */}
       {toastMessage && (
-        <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-black border border-[var(--border-subtle)] text-white px-4 py-2 rounded-lg text-sm z-50 shadow-lg animate-in fade-in slide-in-from-top-2 flex items-center gap-2">
-          <CheckCircle2 size={16} className="text-atw-green" />
+        <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-[var(--bg-elevated)] border border-[var(--border-subtle)] text-[var(--text-primary)] px-4 py-2 rounded-lg text-sm z-50 shadow-lg animate-in fade-in slide-in-from-top-2 flex items-center gap-2">
+          <CheckCircle2 size={16} className="text-[var(--pass)]" />
           {toastMessage}
         </div>
       )}
 
       <div className="flex items-center justify-between mb-8">
         <div>
-          <h1 className="text-3xl font-bold text-white tracking-tight flex items-center gap-3">
-            <Flame className="text-orange-500" size={32} />
+          <h1 className="text-3xl font-bold text-[var(--text-primary)] tracking-tight flex items-center gap-3">
+            <Flame className="text-[var(--amber)]" size={32} />
             High Risk Zones
           </h1>
-          <p className="text-white/50 mt-2">Aggregated risk scoring based on active issues, historical RFIs, and real-time activity.</p>
+          <p className="text-[var(--text-secondary)] mt-2">Aggregated risk scoring based on active issues, historical RFIs, and real-time activity.</p>
         </div>
-        
+
         <div className="flex flex-col items-end gap-3">
           <div className="flex items-center gap-2 text-xs font-mono">
             {lastUpdated && (
-              <span className="text-white/40">Last sync: {format(lastUpdated, 'h:mm:ss aa')}</span>
+              <span className="text-[var(--text-muted)]">Last sync: {format(lastUpdated, 'h:mm:ss aa')}</span>
             )}
-            <span style={{
-              color: connectionStatus === 'live' ? '#00e5c0' : 
-                     connectionStatus === 'offline' ? '#e53935' : '#f59e0b',
-              border: `1px solid currentColor`,
-              borderRadius: 4,
-              padding: '2px 8px',
-              fontSize: 11,
-              fontWeight: 500
-            }}>
-              {connectionStatus === 'live' ? '● LIVE' : 
+            <span
+              className="border rounded px-2 py-0.5 text-[11px] font-medium"
+              style={{
+                color: connectionStatus === 'live' ? 'var(--pass)' : connectionStatus === 'offline' ? 'var(--fail)' : 'var(--amber)',
+                borderColor: 'currentColor',
+              }}
+            >
+              {connectionStatus === 'live' ? '● LIVE' :
                connectionStatus === 'offline' ? '● OFFLINE' : '● DEMO MODE'}
             </span>
           </div>
-          
-          <div className="flex items-center gap-2 bg-[#12121A] border border-white/10 rounded p-1">
+
+          <div className="flex items-center gap-2 bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded p-1">
             {['all', 'critical', 'elevated', 'normal'].map(level => (
               <button
                 key={level}
                 onClick={() => setFilter(level as any)}
+                className="rounded-md px-3 py-1 text-xs transition-colors"
                 style={{
-                  background: filter === level ? '#1a2a1a' : 'transparent',
-                  border: `0.5px solid ${filter === level ? '#00e5c0' : '#2a2a2a'}`,
-                  color: filter === level ? '#00e5c0' : '#666',
-                  borderRadius: 6,
-                  padding: '4px 12px',
-                  fontSize: 12,
-                  cursor: 'pointer'
+                  background: filter === level ? 'var(--cyan-dim)' : 'transparent',
+                  border: `1px solid ${filter === level ? 'var(--cyan)' : 'var(--border-subtle)'}`,
+                  color: filter === level ? 'var(--cyan)' : 'var(--text-muted)',
                 }}
               >
-                {level === 'all' ? 'All zones' : 
+                {level === 'all' ? 'All zones' :
                  level.charAt(0).toUpperCase() + level.slice(1)}
               </button>
             ))}
@@ -153,25 +153,25 @@ export default function ZonesPage() {
       {/* Summary Row */}
       {summary && (
         <div className="grid grid-cols-3 gap-4 mb-8">
-          <div className="bg-[#12121A] border border-white/10 rounded-xl p-4 flex items-center gap-4">
-            <div className="bg-atw-red/10 p-3 rounded-lg"><Flame size={24} className="text-atw-red" /></div>
+          <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl p-4 flex items-center gap-4">
+            <div className="bg-[var(--fail-dim)] p-3 rounded-lg"><Flame size={24} className="text-[var(--fail)]" /></div>
             <div>
-              <div className="text-white/40 text-xs uppercase tracking-widest font-bold">Critical Zones</div>
-              <div className="text-2xl font-black text-white">{summary.critical_count}</div>
+              <div className="text-[var(--text-muted)] text-xs uppercase tracking-widest font-bold">Critical Zones</div>
+              <div className="text-2xl font-black text-[var(--text-primary)]">{summary.critical_count}</div>
             </div>
           </div>
-          <div className="bg-[#12121A] border border-white/10 rounded-xl p-4 flex items-center gap-4">
-            <div className="bg-atw-cyan/10 p-3 rounded-lg"><HardHat size={24} className="text-atw-cyan" /></div>
+          <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl p-4 flex items-center gap-4">
+            <div className="bg-[var(--cyan-dim)] p-3 rounded-lg"><HardHat size={24} className="text-[var(--cyan)]" /></div>
             <div>
-              <div className="text-white/40 text-xs uppercase tracking-widest font-bold">Active Workers</div>
-              <div className="text-2xl font-black text-white">{summary.total_workers}</div>
+              <div className="text-[var(--text-muted)] text-xs uppercase tracking-widest font-bold">Active Workers</div>
+              <div className="text-2xl font-black text-[var(--text-primary)]">{summary.total_workers}</div>
             </div>
           </div>
-          <div className="bg-[#12121A] border border-white/10 rounded-xl p-4 flex items-center gap-4">
-            <div className="bg-atw-amber/10 p-3 rounded-lg"><ShieldAlert size={24} className="text-atw-amber" /></div>
+          <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl p-4 flex items-center gap-4">
+            <div className="bg-[var(--amber-dim)] p-3 rounded-lg"><ShieldAlert size={24} className="text-[var(--amber)]" /></div>
             <div>
-              <div className="text-white/40 text-xs uppercase tracking-widest font-bold">Open Issues</div>
-              <div className="text-2xl font-black text-white">{summary.total_open_issues}</div>
+              <div className="text-[var(--text-muted)] text-xs uppercase tracking-widest font-bold">Open Issues</div>
+              <div className="text-2xl font-black text-[var(--text-primary)]">{summary.total_open_issues}</div>
             </div>
           </div>
         </div>
@@ -187,48 +187,30 @@ export default function ZonesPage() {
               }
             `}</style>
             {[1, 2, 3].map(i => (
-              <div key={i} style={{
-                background: '#161616', border: '0.5px solid #222',
-                borderLeft: '3px solid #2a2a2a', borderRadius: 10,
-                padding: '16px 20px', marginBottom: 10,
-                display: 'flex', alignItems: 'center', gap: 16
-              }}>
+              <div key={i} className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-[10px] px-5 py-4 mb-2.5 flex items-center gap-4" style={{ borderLeft: '3px solid var(--border-muted)' }}>
                 <div style={{ flex: 1 }}>
-                  <div style={{ background: 'linear-gradient(90deg, #1a1a1a 25%, #222 50%, #1a1a1a 75%)', backgroundSize: '800px 100%', animation: 'shimmer 1.5s infinite', height: 16, width: 120, borderRadius: 4, marginBottom: 10 }} />
-                  <div style={{ background: 'linear-gradient(90deg, #1a1a1a 25%, #222 50%, #1a1a1a 75%)', backgroundSize: '800px 100%', animation: 'shimmer 1.5s infinite', height: 20, width: 240, borderRadius: 4, marginBottom: 10 }} />
-                  <div style={{ background: 'linear-gradient(90deg, #1a1a1a 25%, #222 50%, #1a1a1a 75%)', backgroundSize: '800px 100%', animation: 'shimmer 1.5s infinite', height: 12, width: 200, borderRadius: 4 }} />
+                  <div style={{ background: 'linear-gradient(90deg, var(--bg-elevated) 25%, var(--bg-hover) 50%, var(--bg-elevated) 75%)', backgroundSize: '800px 100%', animation: 'shimmer 1.5s infinite', height: 16, width: 120, borderRadius: 4, marginBottom: 10 }} />
+                  <div style={{ background: 'linear-gradient(90deg, var(--bg-elevated) 25%, var(--bg-hover) 50%, var(--bg-elevated) 75%)', backgroundSize: '800px 100%', animation: 'shimmer 1.5s infinite', height: 20, width: 240, borderRadius: 4, marginBottom: 10 }} />
+                  <div style={{ background: 'linear-gradient(90deg, var(--bg-elevated) 25%, var(--bg-hover) 50%, var(--bg-elevated) 75%)', backgroundSize: '800px 100%', animation: 'shimmer 1.5s infinite', height: 12, width: 200, borderRadius: 4 }} />
                 </div>
-                <div style={{ background: 'linear-gradient(90deg, #1a1a1a 25%, #222 50%, #1a1a1a 75%)', backgroundSize: '800px 100%', animation: 'shimmer 1.5s infinite', height: 40, width: 80, borderRadius: 4 }} />
+                <div style={{ background: 'linear-gradient(90deg, var(--bg-elevated) 25%, var(--bg-hover) 50%, var(--bg-elevated) 75%)', backgroundSize: '800px 100%', animation: 'shimmer 1.5s infinite', height: 40, width: 80, borderRadius: 4 }} />
               </div>
             ))}
           </div>
         </div>
       ) : error ? (
-        <div className="bg-atw-red/10 border border-atw-red/30 text-atw-red p-4 rounded-xl">
+        <div className="bg-[var(--fail-dim)] border border-[var(--fail)]/30 text-[var(--fail)] p-4 rounded-xl">
           {error}
         </div>
       ) : (
         <div className="flex-1 overflow-y-auto min-h-0">
           <div className="flex flex-col gap-6 pb-10">
             {connectionStatus === 'offline' && (
-              <div style={{
-                background: '#1a0a0a',
-                border: '0.5px solid #4a1010',
-                borderRadius: 6,
-                padding: '8px 14px',
-                fontSize: 12,
-                color: '#e53935',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                marginBottom: 12
-              }}>
+              <div className="bg-[var(--fail-dim)] border border-[var(--fail)]/30 rounded-md px-3.5 py-2 text-xs text-[var(--fail)] flex items-center justify-between mb-3">
                 <span>⚠ Live updates paused — reconnecting...</span>
                 <button
                   onClick={() => window.location.reload()}
-                  style={{ background: 'none', border: 'none',
-                           color: '#e53935', cursor: 'pointer',
-                           textDecoration: 'underline', fontSize: 12 }}
+                  className="bg-transparent border-none text-[var(--fail)] cursor-pointer underline text-xs"
                 >
                   Retry now
                 </button>
@@ -236,16 +218,12 @@ export default function ZonesPage() {
             )}
 
             {filteredZones.length === 0 && (
-              <div style={{
-                textAlign: 'center',
-                padding: '48px 0',
-                color: '#444'
-              }}>
-                <div style={{ fontSize: 32, marginBottom: 12 }}>✓</div>
-                <div style={{ fontSize: 15, color: '#666', marginBottom: 4 }}>
+              <div className="text-center py-12 text-[var(--text-muted)]">
+                <div className="text-3xl mb-3">✓</div>
+                <div className="text-[15px] text-[var(--text-secondary)] mb-1">
                   No {filter === 'all' ? '' : filter} zones
                 </div>
-                <div style={{ fontSize: 12, color: '#444' }}>
+                <div className="text-xs text-[var(--text-muted)]">
                   {filter === 'critical'
                     ? 'No critical risk zones right now'
                     : filter === 'elevated'
@@ -260,101 +238,63 @@ export default function ZonesPage() {
               const colors = RISK_COLORS[riskLvl];
 
               return (
-                <div key={zone.id} style={{
-                  background: '#161616',
-                  border: `0.5px solid #262626`,
-                  borderLeft: `3px solid ${colors.card_border}`,
-                  borderRadius: 10,
-                  padding: '16px 20px',
-                  backgroundColor: `color-mix(in srgb, #161616 95%, ${colors.card_border})`,
-                  transition: 'border-color 0.3s ease'
-                }} className="shadow-2xl relative overflow-hidden group hover:border-white/20">
+                <div
+                  key={zone.id}
+                  className="shadow-2xl relative overflow-hidden group rounded-[10px] px-5 py-4 bg-[var(--bg-surface)] border border-[var(--border-subtle)] hover:border-[var(--border-accent)] transition-colors"
+                  style={{ borderLeft: `3px solid ${colors.card_border}` }}
+                >
                   <div className="flex flex-col md:flex-row gap-8 items-start md:items-center justify-between pl-3">
-                    
+
                     {/* Info Block */}
                     <div className="flex-1">
                       <div className="flex items-center gap-3 mb-2">
-                        <span style={{
-                          background: colors.badge_bg,
-                          color: colors.badge_text,
-                          border: `0.5px solid ${colors.badge_border}`,
-                          borderRadius: 4,
-                          padding: '2px 7px',
-                          fontSize: 10,
-                          fontWeight: 500,
-                          letterSpacing: '0.5px'
-                        }}>
+                        <span
+                          className="rounded px-1.5 py-0.5 text-[10px] font-medium tracking-wide"
+                          style={{ background: colors.badge_bg, color: colors.badge_text, border: `1px solid ${colors.badge_border}` }}
+                        >
                           {riskLvl.toUpperCase()} RISK
                         </span>
-                        <span className="text-white/40 text-xs font-mono tracking-wider">ZONE {zone.zone_code}</span>
-                        
+                        <span className="text-[var(--text-muted)] text-xs font-mono tracking-wider">ZONE {zone.zone_code}</span>
+
                         {zone.last_scored_at && (
-                          <span className="text-white/30 text-xs font-mono flex items-center gap-1">
+                          <span className="text-[var(--text-muted)] text-xs font-mono flex items-center gap-1 opacity-80">
                             <Clock size={12} />
                             {formatDistanceToNow(new Date(zone.last_scored_at), { addSuffix: true })}
                           </span>
                         )}
                       </div>
-                      <h3 className="text-white text-xl font-bold mb-3">{zone.name}</h3>
-                      
-                      <div className="flex items-center gap-6 text-xs text-white/60 mb-4">
-                        <span className="flex items-center gap-2"><Activity size={14} className="text-atw-cyan" /> {zone.current_activity}</span>
-                        <span className="flex items-center gap-2"><HardHat size={14} className="text-atw-amber" /> {zone.active_worker_count} Active Workers</span>
-                        <span className="flex items-center gap-2"><ShieldAlert size={14} className={zone.open_issue_count > 0 ? "text-atw-red" : "text-white/40"} /> {zone.open_issue_count} Open Issues</span>
+                      <h3 className="text-[var(--text-primary)] text-xl font-bold mb-3">{zone.name}</h3>
+
+                      <div className="flex items-center gap-6 text-xs text-[var(--text-secondary)] mb-4">
+                        <span className="flex items-center gap-2"><Activity size={14} className="text-[var(--cyan)]" /> {zone.current_activity}</span>
+                        <span className="flex items-center gap-2"><HardHat size={14} className="text-[var(--amber)]" /> {zone.active_worker_count} Active Workers</span>
+                        <span className="flex items-center gap-2"><ShieldAlert size={14} className={zone.open_issue_count > 0 ? "text-[var(--fail)]" : "text-[var(--text-muted)]"} /> {zone.open_issue_count} Open Issues</span>
                       </div>
 
                       <div className="zone-actions flex gap-3" onClick={e => e.stopPropagation()}>
                         {riskLvl === 'critical' && (
-                          <button 
-                            className="btn-alert"
+                          <button
                             disabled={alertLoadingId === zone.id}
                             onClick={() => handleAlertTeam(zone.id)}
-                            style={{
-                              background: '#1a0808',
-                              border: '0.5px solid #5a1212',
-                              color: '#e53935',
-                              borderRadius: '6px',
-                              padding: '5px 12px',
-                              fontSize: '12px',
-                              cursor: 'pointer',
-                              transition: 'background 0.15s'
-                            }}
+                            className="rounded-md px-3 py-1.5 text-xs bg-[var(--fail-dim)] border border-[var(--fail)]/40 text-[var(--fail)] transition-colors"
                           >
                             <Bell size={12} className="inline mr-1" />
                             {alertLoadingId === zone.id ? "Alerting..." : "Alert team"}
                           </button>
                         )}
-                        
+
                         {zone.open_issue_count > 0 && (
-                          <button 
-                            className="btn-secondary"
+                          <button
                             onClick={() => openIssuesPanel(zone.id)}
-                            style={{
-                              background: '#1a1a1a',
-                              border: '0.5px solid #2a2a2a',
-                              color: '#aaa',
-                              borderRadius: '6px',
-                              padding: '5px 12px',
-                              fontSize: '12px',
-                              cursor: 'pointer'
-                            }}
+                            className="rounded-md px-3 py-1.5 text-xs bg-[var(--bg-elevated)] border border-[var(--border-subtle)] text-[var(--text-secondary)]"
                           >
                             View issues ({zone.open_issue_count})
                           </button>
                         )}
-                        
-                        <button 
-                          className="btn-ghost"
-                          onClick={() => {}}
-                          style={{
-                            background: 'transparent',
-                            border: '0.5px solid transparent',
-                            color: '#aaa',
-                            borderRadius: '6px',
-                            padding: '5px 12px',
-                            fontSize: '12px',
-                            cursor: 'pointer'
-                          }}
+
+                        <button
+                          onClick={() => setDetailZoneId(zone.id)}
+                          className="rounded-md px-3 py-1.5 text-xs bg-transparent border border-transparent hover:border-[var(--border-subtle)] text-[var(--text-secondary)] transition-colors"
                         >
                           Details
                         </button>
@@ -362,40 +302,27 @@ export default function ZonesPage() {
                     </div>
 
                     {/* Risk Score Block */}
-                    <div className="w-full md:w-64 bg-black/40 border border-white/5 rounded-lg p-4 flex flex-col items-center justify-center shrink-0">
-                      <span className="text-[10px] uppercase tracking-widest text-white/40 font-bold mb-1">Risk Score</span>
+                    <div className="w-full md:w-64 bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-lg p-4 flex flex-col items-center justify-center shrink-0">
+                      <span className="text-[10px] uppercase tracking-widest text-[var(--text-muted)] font-bold mb-1">Risk Score</span>
                       <div className="flex items-end gap-1 mb-3">
                         <span style={{ color: colors.score }} className="text-4xl font-black tracking-tighter transition-colors duration-500">
                           {zone.risk_score}
                         </span>
-                        <span className="text-white/30 text-lg mb-1 font-bold">/ 100</span>
+                        <span className="text-[var(--text-muted)] text-lg mb-1 font-bold">/ 100</span>
                       </div>
-                      
-                      <div style={{ position: 'relative', width: '100%' }}>
-                        <div style={{
-                          width: '100%',
-                          height: '4px',
-                          background: '#222',
-                          borderRadius: '2px',
-                          overflow: 'hidden'
-                        }}>
-                          <div style={{
-                            height: '100%',
-                            width: `${zone.risk_score}%`,
-                            background: colors.bar,
-                            borderRadius: '2px',
-                            transition: 'width 0.8s ease, background 0.4s ease'
-                          }} />
+
+                      <div className="relative w-full">
+                        <div className="w-full h-1 rounded bg-[var(--border-subtle)] overflow-hidden">
+                          <div
+                            className="h-full rounded transition-all duration-700"
+                            style={{ width: `${zone.risk_score}%`, background: colors.bar }}
+                          />
                         </div>
-                        <div style={{
-                          position: 'absolute',
-                          left: '70%',
-                          top: 0,
-                          width: '1px',
-                          height: '4px',
-                          background: '#e53935',
-                          opacity: 0.4
-                        }} title="Critical threshold" />
+                        <div
+                          className="absolute top-0 w-px h-1 opacity-40"
+                          style={{ left: '70%', background: 'var(--fail)' }}
+                          title="Critical threshold"
+                        />
                       </div>
                     </div>
 
@@ -404,7 +331,7 @@ export default function ZonesPage() {
               );
             })}
             {filteredZones.length === 0 && (
-              <div className="text-center text-white/40 py-12">
+              <div className="text-center text-[var(--text-muted)] py-12">
                 No zones match the current filter.
               </div>
             )}
@@ -415,45 +342,45 @@ export default function ZonesPage() {
       {/* Slide-over Issues Panel */}
       {selectedZoneIdForIssues && (
         <>
-          <div 
+          <div
             className="fixed inset-0 bg-black/50 z-40"
             onClick={() => setSelectedZoneIdForIssues(null)}
           />
-          <div className="fixed top-0 right-0 h-full w-[400px] bg-[#12121A] border-l border-white/10 shadow-2xl z-50 flex flex-col animate-in slide-in-from-right">
-            <div className="p-6 border-b border-white/10 flex justify-between items-center bg-[#161616]">
-              <h2 className="text-xl font-bold text-white flex items-center gap-2">
-                <ShieldAlert className="text-atw-amber" />
+          <div className="fixed top-0 right-0 h-full w-[400px] bg-[var(--bg-surface)] border-l border-[var(--border-subtle)] shadow-2xl z-50 flex flex-col animate-in slide-in-from-right">
+            <div className="p-6 border-b border-[var(--border-subtle)] flex justify-between items-center bg-[var(--bg-elevated)]">
+              <h2 className="text-xl font-bold text-[var(--text-primary)] flex items-center gap-2">
+                <ShieldAlert className="text-[var(--amber)]" />
                 Zone Issues
               </h2>
-              <button 
+              <button
                 onClick={() => setSelectedZoneIdForIssues(null)}
-                className="text-white/50 hover:text-white"
+                className="text-[var(--text-muted)] hover:text-[var(--text-primary)]"
               >
                 ✕
               </button>
             </div>
-            
+
             <div className="flex-1 overflow-y-auto p-6 flex flex-col gap-4">
               {issuesLoading ? (
-                <div className="text-white/50 text-center py-10">Loading issues...</div>
+                <div className="text-[var(--text-muted)] text-center py-10">Loading issues...</div>
               ) : zoneIssues.length === 0 ? (
-                <div className="text-white/50 text-center py-10">No open issues found.</div>
+                <div className="text-[var(--text-muted)] text-center py-10">No open issues found.</div>
               ) : (
                 zoneIssues.map((issue) => (
-                  <div key={issue.id} className="bg-black/40 border border-white/5 p-4 rounded-lg">
+                  <div key={issue.id} className="bg-[var(--bg-elevated)] border border-[var(--border-subtle)] p-4 rounded-lg">
                     <div className="flex justify-between items-start mb-2">
-                      <span className="text-xs font-mono font-semibold text-white/80">{issue.id}</span>
-                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-widest ${
-                        issue.severity === 'CRITICAL' ? 'bg-atw-red/20 text-atw-red border border-atw-red/30' : 
-                        issue.severity === 'HIGH' ? 'bg-orange-500/20 text-orange-500 border border-orange-500/30' : 
-                        'bg-atw-amber/20 text-atw-amber border border-atw-amber/30'
+                      <span className="text-xs font-mono font-semibold text-[var(--text-secondary)]">{issue.id}</span>
+                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-widest border ${
+                        issue.severity === 'CRITICAL' ? 'bg-[var(--fail-dim)] text-[var(--fail)] border-[var(--fail)]/30' :
+                        issue.severity === 'HIGH' ? 'bg-[var(--amber-dim)] text-[var(--amber)] border-[var(--amber)]/30' :
+                        'bg-[var(--warning-dim)] text-[var(--warning)] border-[var(--warning)]/30'
                       }`}>
                         {issue.severity}
                       </span>
                     </div>
-                    <h4 className="text-white font-semibold text-sm mb-1">{issue.title}</h4>
-                    <p className="text-white/50 text-xs mb-3">{issue.description}</p>
-                    <div className="flex justify-between text-[10px] text-white/30">
+                    <h4 className="text-[var(--text-primary)] font-semibold text-sm mb-1">{issue.title}</h4>
+                    <p className="text-[var(--text-secondary)] text-xs mb-3">{issue.description}</p>
+                    <div className="flex justify-between text-[10px] text-[var(--text-muted)]">
                       <span>Assigned to: {issue.assigned_to}</span>
                       <span>{formatDistanceToNow(new Date(issue.created_at), { addSuffix: true })}</span>
                     </div>
@@ -465,6 +392,58 @@ export default function ZonesPage() {
         </>
       )}
 
+      {/* Zone Details Panel */}
+      {detailZone && (
+        <>
+          <div
+            className="fixed inset-0 bg-black/50 z-40"
+            onClick={() => setDetailZoneId(null)}
+          />
+          <div className="fixed top-0 right-0 h-full w-[400px] bg-[var(--bg-surface)] border-l border-[var(--border-subtle)] shadow-2xl z-50 flex flex-col animate-in slide-in-from-right">
+            <div className="p-6 border-b border-[var(--border-subtle)] flex justify-between items-center bg-[var(--bg-elevated)]">
+              <h2 className="text-xl font-bold text-[var(--text-primary)]">Zone {detailZone.zone_code}</h2>
+              <button onClick={() => setDetailZoneId(null)} className="text-[var(--text-muted)] hover:text-[var(--text-primary)]">✕</button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-6 flex flex-col gap-4 text-sm">
+              <div>
+                <div className="text-[10px] uppercase tracking-widest text-[var(--text-muted)] mb-1">Name</div>
+                <div className="text-[var(--text-primary)] font-semibold">{detailZone.name}</div>
+              </div>
+              <div>
+                <div className="text-[10px] uppercase tracking-widest text-[var(--text-muted)] mb-1">Current Activity</div>
+                <div className="text-[var(--text-secondary)]">{detailZone.current_activity}</div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="bg-[var(--bg-elevated)] rounded-lg p-3 border border-[var(--border-subtle)]">
+                  <div className="text-[10px] uppercase tracking-widest text-[var(--text-muted)] mb-1">Risk Score</div>
+                  <div className="text-xl font-bold" style={{ color: RISK_COLORS[getRiskLevel(detailZone.risk_score)].score }}>{detailZone.risk_score}/100</div>
+                </div>
+                <div className="bg-[var(--bg-elevated)] rounded-lg p-3 border border-[var(--border-subtle)]">
+                  <div className="text-[10px] uppercase tracking-widest text-[var(--text-muted)] mb-1">Workers</div>
+                  <div className="text-xl font-bold text-[var(--text-primary)]">{detailZone.active_worker_count}</div>
+                </div>
+                <div className="bg-[var(--bg-elevated)] rounded-lg p-3 border border-[var(--border-subtle)]">
+                  <div className="text-[10px] uppercase tracking-widest text-[var(--text-muted)] mb-1">Open Issues</div>
+                  <div className="text-xl font-bold text-[var(--text-primary)]">{detailZone.open_issue_count}</div>
+                </div>
+                <div className="bg-[var(--bg-elevated)] rounded-lg p-3 border border-[var(--border-subtle)]">
+                  <div className="text-[10px] uppercase tracking-widest text-[var(--text-muted)] mb-1">Last Scored</div>
+                  <div className="text-xs text-[var(--text-secondary)] mt-1.5">{detailZone.last_scored_at ? formatDistanceToNow(new Date(detailZone.last_scored_at), { addSuffix: true }) : 'n/a'}</div>
+                </div>
+              </div>
+              {detailZone.open_issue_count > 0 && (
+                <button
+                  onClick={() => { setDetailZoneId(null); openIssuesPanel(detailZone.id); }}
+                  className="mt-2 rounded-lg px-3 py-2 text-xs bg-[var(--cyan-dim)] border border-[var(--cyan)]/30 text-[var(--cyan)]"
+                >
+                  View {detailZone.open_issue_count} open issue{detailZone.open_issue_count > 1 ? 's' : ''}
+                </button>
+              )}
+            </div>
+          </div>
+        </>
+      )}
+
     </div>
-  ); 
+  );
 }

@@ -3,6 +3,7 @@
 import * as React from 'react'
 import { ThemeProvider } from 'next-themes'
 import { Toaster } from 'sonner'
+import { AuthProvider } from '@/context/AuthContext'
 
 // Workaround for React 19 / Next.js 15+ strict script tag warnings with next-themes
 if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
@@ -22,8 +23,10 @@ export function Providers({ children }: { children: React.ReactNode }) {
       defaultTheme="dark"
       enableSystem={false}
     >
-      {children}
-      <Toaster theme="dark" position="bottom-right" richColors />
+      <AuthProvider>
+        {children}
+        <Toaster theme="dark" position="bottom-right" richColors />
+      </AuthProvider>
     </ThemeProvider>
   )
 }

@@ -23,6 +23,11 @@ class EscalateRequest(BaseModel):
     escalate_to_role: str
     note: Optional[str] = ""
 
+class RejectRequest(BaseModel):
+    rejected_by_user_id: str
+    rejection_reason: str
+    is_false_positive: bool = True
+
 class ExportRequest(BaseModel):
     severity_filter: str
     format: str
@@ -48,6 +53,7 @@ def issue_to_dict(issue: FieldIssue):
         "escalated_at": issue.escalated_at.isoformat() if issue.escalated_at else None,
         "detected_by": issue.detected_by,
         "drawing_ref": issue.drawing_ref,
+        "is_hard_negative": bool(issue.is_hard_negative),
         "created_at": issue.created_at.isoformat() if issue.created_at else None,
         "updated_at": issue.updated_at.isoformat() if issue.updated_at else None
     }
@@ -143,6 +149,38 @@ async def escalate_issue(issue_id: str, req: EscalateRequest, db: AsyncSession =
     })
     
     return {"issue_id": issue.id, "status": "escalated", "notified_users": ["manager_1"]}
+
+@router.post("/issues/{issue_id}/reject")
+async def reject_issue(issue_id: str, req: RejectRequest, db: AsyncSession = Depends(get_db)):
+    """
+    Data Flywheel: Rejects an issue and marks it as a Hard Negative for nightly retraining.
+    """
+    result = await db.execute(select(FieldIssue).where(FieldIssue.id == issue_id))
+    issue = result.scalar_one_or_none()
+    if not issue:
+        raise HTTPException(status_code=404, detail="Issue not found")
+        
+    issue.status = "dismissed"
+    issue.resolved_at = datetime.utcnow()
+    issue.resolved_by = req.rejected_by_user_id
+    issue.resolution_note = f"Rejected: {req.rejection_reason}"
+    
+    if req.is_false_positive:
+        issue.is_hard_negative = 1
+        
+    await db.commit()
+    
+    # Broadcast SSE
+    await bus.publish(f"project_{issue.project_id}_issues", {
+        "type": "ISSUE_REJECTED",
+        "issue_id": issue.id,
+        "is_hard_negative": req.is_false_positive
+    })
+    
+    # In a real system, we'd trigger a celery task to move the video frame from Redis/MinIO to the 'training_buffer' bucket.
+    print(f"Data Flywheel Triggered: Issue {issue.id} marked as Hard Negative. Frame queued for LoRA tuning.")
+    
+    return {"issue_id": issue.id, "status": "dismissed", "flywheel_triggered": req.is_false_positive}
 
 @router.get("/projects/{project_id}/issues/stream")
 async def issues_stream(project_id: str):

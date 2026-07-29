@@ -3,6 +3,7 @@ import uuid
 import sys
 import os
 import shutil
+import numpy as np
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../../")))
 from agents.vision.detector import VisionPipeline
@@ -12,6 +13,27 @@ from agents.vision.vlm_analyzer import VLMAnalyzer
 from fastapi import Body
 
 router = APIRouter(prefix="/api/v1/vision", tags=["Vision Agent (Agent 1)"])
+
+
+def _json_safe(obj):
+    """
+    Recursively strip/convert values VisionPipeline.analyze_frame() returns
+    that FastAPI's jsonable_encoder can't serialize: the raw annotated_frame
+    ndarray (meant for local display/streaming, e.g. live_feed.py's base64
+    JPEG encoding — never meant to ride in a JSON body) is dropped entirely,
+    and any stray numpy scalars (np.float32 etc., which round()/float() on
+    a numpy type doesn't always fully convert) are cast to native Python
+    types. Without this, /understand and /analyze 500 on every real call.
+    """
+    if isinstance(obj, np.ndarray):
+        return None
+    if isinstance(obj, np.generic):
+        return obj.item()
+    if isinstance(obj, dict):
+        return {k: _json_safe(v) for k, v in obj.items() if k != "annotated_frame"}
+    if isinstance(obj, (list, tuple)):
+        return [_json_safe(v) for v in obj]
+    return obj
 
 # Initialize vision pipeline and VLM
 pipeline = VisionPipeline()
@@ -38,11 +60,11 @@ async def analyze_image(file: UploadFile = File(...)):
             
         # Run vision inference
         results = pipeline.analyze_frame(temp_file_path)
-        
+
         return {
             "status": "completed",
             "job_id": job_id,
-            "results": results
+            "results": _json_safe(results)
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -130,9 +152,9 @@ async def understand_scene(
             print(f"Error sending notification: {e}")
 
     # Return unified payload
-    return {
+    return _json_safe({
         "scene": vlm_result,
         "detections": yolo_result,
         "spoken_response": vlm_result.get("spoken_response", ""),
         "language": language
-    }
+    })

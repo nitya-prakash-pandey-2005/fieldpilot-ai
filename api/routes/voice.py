@@ -2,7 +2,9 @@ from fastapi import APIRouter, File, UploadFile, Form
 from pydantic import BaseModel
 # from agents.voice.voice_agent import VoiceAgent
 from agents.memory.retriever import QdrantRetrieval
+from agents.voice.tts import synthesize_speech
 import base64
+import tempfile
 from groq import Groq
 import os
 
@@ -21,13 +23,35 @@ async def voice_query(
     zone_id: str = Form("A12")
 ):
     audio_bytes = await audio.read()
+
+    # Save audio temporarily for Groq API. Uses a unique tempfile (not a
+    # fixed "temp_audio_query.wav" in the CWD) so concurrent requests don't
+    # clobber each other's audio mid-transcription.
+    fd, temp_audio_path = tempfile.mkstemp(suffix=".wav")
+    os.close(fd)
+    with open(temp_audio_path, "wb") as f:
+        f.write(audio_bytes)
+        
+    user_query = ""
+    lang = "en"
     
-    # STT
-    transcription = await voice_agent.transcribe(audio_bytes, audio.filename)
-    user_query = transcription.get("text", "")
-    lang = transcription.get("language", "en")
+    try:
+        if llm_client:
+            with open(temp_audio_path, "rb") as file:
+                transcription = llm_client.audio.transcriptions.create(
+                  file=(temp_audio_path, file.read()),
+                  model="whisper-large-v3-turbo",
+                  response_format="json"
+                )
+            user_query = transcription.text
+            print(f"Transcribed: {user_query}")
+    except Exception as e:
+        print(f"STT Error: {e}")
+        
+    if os.path.exists(temp_audio_path):
+        os.remove(temp_audio_path)
     
-    if not user_query or user_query == "Error transcribing audio.":
+    if not user_query:
         return {"transcript": "Error", "response_text": "Could not understand audio.", "audio_base64": ""}
     
     # RAG lookup via existing Qdrant retriever
@@ -65,11 +89,13 @@ async def voice_query(
         except Exception as e:
             print(f"LLM Error: {e}")
     
+    audio_b64 = synthesize_speech(answer) or ""  # falls back to client-side TTS if Gemini isn't configured/reachable
+
     return {
         "transcript": user_query,
         "detected_language": lang,
         "response_text": answer,
-        "audio_base64": "" # Audio handled client-side for now
+        "audio_base64": audio_b64,
     }
 
 
@@ -82,13 +108,33 @@ class VoiceQueryPayload(BaseModel):
 @router.post("/query_json")
 async def voice_query_json(payload: VoiceQueryPayload):
     audio_bytes = base64.b64decode(payload.audio_base64)
+
+    # Unique tempfile — see /query above for why this isn't a fixed filename.
+    fd, temp_audio_path = tempfile.mkstemp(suffix=".wav")
+    os.close(fd)
+    with open(temp_audio_path, "wb") as f:
+        f.write(audio_bytes)
+        
+    user_query = ""
+    lang = "en"
     
-    # STT
-    transcription = await voice_agent.transcribe(audio_bytes, "audio.m4a")
-    user_query = transcription.get("text", "")
-    lang = transcription.get("language", "en")
+    try:
+        if llm_client:
+            with open(temp_audio_path, "rb") as file:
+                transcription = llm_client.audio.transcriptions.create(
+                  file=(temp_audio_path, file.read()),
+                  model="whisper-large-v3-turbo",
+                  response_format="json"
+                )
+            user_query = transcription.text
+            print(f"Transcribed: {user_query}")
+    except Exception as e:
+        print(f"STT Error: {e}")
+        
+    if os.path.exists(temp_audio_path):
+        os.remove(temp_audio_path)
     
-    if not user_query or user_query == "Error transcribing audio.":
+    if not user_query:
         return {"transcript": "Error", "response_text": "Could not understand audio.", "audio_base64": ""}
     
     # RAG lookup via existing Qdrant retriever
@@ -128,10 +174,12 @@ async def voice_query_json(payload: VoiceQueryPayload):
         except Exception as e:
             print(f"LLM Error: {e}")
     
+    audio_b64 = synthesize_speech(answer) or ""  # falls back to client-side TTS if Gemini isn't configured/reachable
+
     return {
         "transcript": user_query,
         "detected_language": lang,
         "response_text": answer,
-        "audio_base64": "", # Audio handled client-side for now
+        "audio_base64": audio_b64,
         "evidence": evidence
     }

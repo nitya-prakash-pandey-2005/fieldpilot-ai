@@ -3,17 +3,61 @@
 import React from 'react';
 import { GlassCard } from '../ui/GlassCard';
 import { useAPIData } from '@/hooks/useAPIData';
-import { StatusBadge } from '../ui/StatusBadge';
+import { ComplianceCard, ComplianceIssue } from '../ui/ComplianceCard';
+import { useAuth } from '@/context/AuthContext';
 
-const DEMO_ISSUES = [
-  { id: "OBS-049", severity: "critical", description: "Unsecured rebar caps on Column C4", zone: "Zone A12", timestamp: "Just now", measured: "190", spec: "150", deviation: "+40", worker: "Ali Hassan" },
-  { id: "OBS-048", severity: "warning", description: "Water pooling near generator", zone: "Zone D4", timestamp: "12 mins ago", worker: "Sarah Chen" },
-  { id: "OBS-047", severity: "high", description: "Missing fall protection harness", zone: "Zone A12", timestamp: "45 mins ago", worker: "Mark Davis" },
-  { id: "OBS-046", severity: "medium", description: "Material blocking egress route", zone: "Zone B3", timestamp: "2 hours ago", worker: "Tom Wilson" },
+// Shape matches the real GET /api/v1/compliance/issues response (see
+// ComplianceCard.tsx) — previously this demo data (and the live-fetch
+// code path) used a different shape (description/timestamp/zone/worker/
+// measured/spec/deviation) the backend never actually served, which only
+// stayed invisible because the endpoint had no real rows before Agent 5's
+// FAIL path was wired to persist ComplianceEvent (see agents/compliance/
+// validator.py).
+const DEMO_ISSUES: ComplianceIssue[] = [
+  { id: "OBS-049", zone_code: "A12", asset_id: "rebar_grid_C4", severity: "CRITICAL", measured_value: 190, spec_value: 150, deviation_pct: 26.7, confidence: 0.93, worker_id: "Ali Hassan", status: "open", created_at: new Date(Date.now() - 2 * 60 * 1000).toISOString() },
+  { id: "OBS-048", zone_code: "D4", asset_id: "generator_bay", severity: "MEDIUM", measured_value: null, spec_value: null, deviation_pct: null, confidence: null, worker_id: "Sarah Chen", status: "open", created_at: new Date(Date.now() - 12 * 60 * 1000).toISOString() },
+  { id: "OBS-047", zone_code: "A12", asset_id: "harness_check", severity: "HIGH", measured_value: null, spec_value: null, deviation_pct: null, confidence: null, worker_id: "Mark Davis", status: "open", created_at: new Date(Date.now() - 45 * 60 * 1000).toISOString() },
+  { id: "OBS-046", zone_code: "B3", asset_id: "egress_route", severity: "MEDIUM", measured_value: null, spec_value: null, deviation_pct: null, confidence: null, worker_id: "Tom Wilson", status: "open", created_at: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString() },
 ];
 
 export function ActiveIssuesPanel() {
-  const { data: issues } = useAPIData('/api/v1/compliance/issues', DEMO_ISSUES);
+  const { data: initialIssues } = useAPIData('/api/v1/compliance/issues', DEMO_ISSUES);
+  const [issues, setIssues] = React.useState<ComplianceIssue[]>([]);
+  const { user } = useAuth();
+
+  React.useEffect(() => {
+    if (initialIssues) {
+      setIssues(initialIssues);
+    }
+  }, [initialIssues]);
+
+  const handleReject = async (issue: ComplianceIssue) => {
+    // Optimistic UI update
+    setIssues(prev => prev.filter(i => i.id !== issue.id));
+
+    // Reject operates on the linked FieldIssue, not the ComplianceEvent's
+    // own id — ComplianceCard only shows the button when field_issue_id is
+    // present. Previously this called a bare relative URL
+    // (`/api/v1/issues/${id}/reject`, no API base) against the ComplianceEvent's
+    // id, which would 404 against the Next.js server itself rather than
+    // reaching the FastAPI backend at all.
+    const API = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+    try {
+      const res = await fetch(`${API}/api/v1/issues/${issue.field_issue_id}/reject`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          rejected_by_user_id: user?.id || user?.email || "unknown",
+          rejection_reason: "Marked as false positive via dashboard",
+          is_false_positive: true
+        })
+      });
+      if (!res.ok) throw new Error(`Reject failed: ${res.status}`);
+      console.log("Data Flywheel: Hard negative logged for " + issue.field_issue_id);
+    } catch (err) {
+      console.error("Failed to reject issue", err);
+    }
+  };
   
   // Real-time timestamp mockup
   const [updateTime, setUpdateTime] = React.useState(0);
@@ -33,53 +77,9 @@ export function ActiveIssuesPanel() {
       </div>
 
       <div className="flex-1 overflow-y-auto p-2">
-        {issues.map((issue: any) => {
-          const isCritical = issue.id === "OBS-049";
-          return (
-          <div key={issue.id} className={`p-3 border-b border-[var(--border-subtle)] last:border-0 hover:bg-[var(--bg-hover)] transition-colors cursor-pointer rounded-lg mb-1 relative
-            ${isCritical ? 'border-l-[3px] shadow-sm' : ''}
-          `}
-          style={{ animation: isCritical ? 'criticalPulse 1.5s ease-in-out infinite' : 'none', borderLeftColor: isCritical ? 'var(--fail)' : 'transparent' }}
-          >
-            <div className="flex items-start justify-between mb-2">
-              <div className="flex items-center gap-2">
-                <StatusBadge status={issue.severity.toUpperCase()} />
-                <span className="text-xs font-mono font-semibold text-[var(--text-primary)]">{issue.id}</span>
-              </div>
-              <span className="text-[10px] text-[var(--text-muted)] font-mono">{issue.timestamp}</span>
-            </div>
-            
-            <p className="text-sm text-[var(--text-secondary)] mb-2">{issue.description}</p>
-            
-            {issue.measured && (
-              <div className="mb-2">
-                <span className="inline-flex items-center text-[10px] bg-black/40 border border-white/10 px-2 py-1 rounded font-mono text-[var(--text-secondary)]">
-                  {issue.measured}mm / spec {issue.spec}mm 
-                  <span className="text-[var(--fail)] font-bold ml-2">({issue.deviation}mm)</span>
-                </span>
-              </div>
-            )}
-            
-            <div className="flex items-center justify-between mt-3">
-              <div className="flex flex-col gap-1 text-[10px]">
-                <div className="flex items-center gap-1.5 text-[var(--text-muted)]">
-                  <span className="text-[var(--cyan)]">📍</span> {issue.zone}
-                </div>
-                <div className="flex items-center gap-1.5 text-[var(--text-muted)] opacity-70">
-                  <span>👷</span> {issue.worker}
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                <button className="text-[10px] font-bold text-[var(--amber)] tracking-wider hover:bg-[var(--amber-dim)] border border-transparent hover:border-[var(--amber)]/30 transition-all uppercase px-2 py-1 rounded">
-                  Escalate
-                </button>
-                <button className="text-[10px] font-bold text-[var(--cyan)] tracking-wider hover:bg-[var(--cyan-dim)] border border-[var(--cyan)]/30 hover:border-[var(--cyan)] transition-all uppercase px-2 py-1 rounded">
-                  Resolve ↗
-                </button>
-              </div>
-            </div>
-          </div>
-        )})}
+        {issues.map((issue) => (
+          <ComplianceCard key={issue.id} issue={issue} onReject={handleReject} />
+        ))}
       </div>
     </GlassCard>
   );

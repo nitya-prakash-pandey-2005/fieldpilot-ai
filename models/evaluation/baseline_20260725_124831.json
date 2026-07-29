@@ -1,0 +1,52 @@
+{
+  "timestamp": "2026-07-25T12:48:26.944958Z",
+  "tests": {
+    "fall": {
+      "mode": "fall",
+      "accuracy": 0.5,
+      "pass": true,
+      "cases": [
+        {
+          "test": "normal_standing",
+          "expected_fall": false,
+          "detected_fall": false,
+          "body_angle_deg": 0.0,
+          "pass": true
+        },
+        {
+          "test": "falling_posture",
+          "expected_fall": true,
+          "detected_fall": false,
+          "body_angle_deg": 0.0,
+          "pass": false
+        },
+        {
+          "test": "video_frame_1",
+          "crashed": false,
+          "persons": 0
+        },
+        {
+          "test": "video_frame_2",
+          "crashed": false,
+          "persons": 0
+        },
+        {
+          "test": "video_frame_3",
+          "crashed": false,
+          "persons": 2
+        },
+        {
+          "test": "video_frame_4",
+          "crashed": false,
+          "persons": 3
+        },
+        {
+          "test": "video_frame_5",
+          "crashed": false,
+          "persons": 0
+        }
+      ]
+    }
+  },
+  "overall_pass": true
+}

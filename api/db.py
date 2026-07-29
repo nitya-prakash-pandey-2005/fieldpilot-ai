@@ -25,16 +25,17 @@ except Exception as e:
     print(f"Failed to connect to Qdrant: {e}")
     qdrant_client = None
 
-def get_qdrant_client():
-    return qdrant_client
-
-# SQLAlchemy Setup (SQLite for local dev)
+# SQLAlchemy Setup (PostgreSQL)
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
 
-SQLALCHEMY_DATABASE_URL = "sqlite+aiosqlite:///./fieldpilot.db"
+# POSTGRES_USER=fieldpilot POSTGRES_PASSWORD=fieldpilot_password POSTGRES_DB=fieldpilot
+SQLALCHEMY_DATABASE_URL = os.getenv(
+    "DATABASE_URL", 
+    "postgresql+asyncpg://fieldpilot:fieldpilot_password@localhost:5432/fieldpilot"
+)
 
 engine = create_async_engine(
-    SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False}
+    SQLALCHEMY_DATABASE_URL, echo=False
 )
 async_session = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 

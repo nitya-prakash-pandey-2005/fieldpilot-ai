@@ -6,10 +6,28 @@ import { Bell, FileText, Camera, Volume2, Square } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import * as htmlToImage from 'html-to-image';
 
-export function ObservationPanel({ scanResult }: { scanResult: any }) {
+export function ObservationPanel({ scanResult, zoneId = 'A12', workerId = 'WRK-001' }: { scanResult: any; zoneId?: string; workerId?: string }) {
   const router = useRouter();
   const [isPlaying, setIsPlaying] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [observedAt, setObservedAt] = useState<number | null>(null);
+  const [secondsAgo, setSecondsAgo] = useState(0);
+  const [obsId, setObsId] = useState('');
+
+  // Real timestamp + id per scan (was a permanently hardcoded "OBS-052 ·
+  // Zone A12 · 2s ago" regardless of when the scan actually happened).
+  React.useEffect(() => {
+    if (scanResult) {
+      setObservedAt(Date.now());
+      setObsId(`OBS-${Date.now().toString(36).toUpperCase().slice(-6)}`);
+    }
+  }, [scanResult]);
+
+  React.useEffect(() => {
+    if (observedAt === null) return;
+    const interval = setInterval(() => setSecondsAgo(Math.floor((Date.now() - observedAt) / 1000)), 1000);
+    return () => clearInterval(interval);
+  }, [observedAt]);
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
@@ -33,12 +51,12 @@ export function ObservationPanel({ scanResult }: { scanResult: any }) {
       await fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000"}/api/v1/notification/dispatch`, { 
         method: 'POST', 
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
+        body: JSON.stringify({
           severity: scanResult.verdict === "CRITICAL" ? "CRITICAL" : "MEDIUM",
-          zone_id: "A12",
+          zone_id: zoneId,
           message: `Scene analysis: ${scanResult.verdict}. Confidence: ${scanResult.confidence}. Manual review requested.`,
-          worker_id: "WRK-001"
-        }) 
+          worker_id: workerId
+        })
       });
       showToast("✓ Engineer notified");
     } catch (e) {
@@ -48,7 +66,7 @@ export function ObservationPanel({ scanResult }: { scanResult: any }) {
 
   const handleFileRfi = () => {
     if (!scanResult) return;
-    router.push(`/rfis?prefill=OBS-052`);
+    router.push(`/rfis?prefill=${obsId}`);
   };
 
   const handleSaveEvidence = async () => {
@@ -67,7 +85,7 @@ export function ObservationPanel({ scanResult }: { scanResult: any }) {
           }
         });
         const link = document.createElement('a');
-        link.download = `observation-OBS-052.png`;
+        link.download = `observation-${obsId}.png`;
         link.href = dataUrl;
         link.click();
         showToast("✓ Evidence saved");
@@ -121,7 +139,7 @@ export function ObservationPanel({ scanResult }: { scanResult: any }) {
             }}
           >
             <div className="text-[var(--text-muted)] mb-2 tracking-wider text-xs">
-              OBS-052 · Zone A12 · 2s ago
+              {obsId} · Zone {zoneId} · {secondsAgo < 60 ? `${secondsAgo}s ago` : `${Math.floor(secondsAgo / 60)}m ago`}
             </div>
             
             <div className="grid grid-cols-3 gap-y-[5px] items-center">

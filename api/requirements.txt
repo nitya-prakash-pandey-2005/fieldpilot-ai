@@ -11,3 +11,18 @@ sqlalchemy
 aiosqlite
 apscheduler
 sse-starlette
+asyncpg
+# Phase 0 Day 3 — ML pipeline
+onnx
+onnxruntime
+pillow
+scipy
+supervision
+websockets
+requests
+lapx          # Windows-compatible drop-in for 'lap' (required by BoT-SORT tracker)
+httpx         # real Slack webhook POSTs (agents/notification/router.py)
+twilio        # real WhatsApp/SMS sends (agents/notification/router.py)
+PyJWT         # JWT auth (api/auth.py)
+bcrypt        # password hashing (api/auth.py)
+email-validator  # pydantic EmailStr (api/routes/auth.py)

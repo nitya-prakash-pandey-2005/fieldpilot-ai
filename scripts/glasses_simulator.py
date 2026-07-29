@@ -89,7 +89,17 @@ def draw_hud(frame, result: dict):
     # Bottom-right
     cv2.line(frame,(w-80,h-80),(w-80-length,h-80), bracket_color, thickness)
     cv2.line(frame,(w-80,h-80),(w-80,h-80-length), bracket_color, thickness)
-    
+    # Draw bounding boxes if any
+    detections = result.get("detections", {}).get("assets_detected", [])
+    for det in detections:
+        bbox = det.get("bounding_box", {})
+        if bbox and all(k in bbox for k in ("x1", "y1", "x2", "y2")):
+            x1, y1, x2, y2 = int(bbox["x1"]), int(bbox["y1"]), int(bbox["x2"]), int(bbox["y2"])
+            label = det.get("asset_type", "Unknown")
+            conf = det.get("confidence", 0.0)
+            cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
+            cv2.putText(frame, f"{label} {conf:.2f}", (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+
     return frame
 
 def process_frame(frame_b64: str) -> dict:
@@ -105,7 +115,10 @@ def process_frame(frame_b64: str) -> dict:
             timeout=30
         )
         if response.status_code == 200:
-            return response.json().get("scene", {})
+            data = response.json()
+            scene = data.get("scene", {})
+            scene["detections"] = data.get("detections", {})
+            return scene
         else:
             print(f"API Error {response.status_code}: {response.text}")
     except Exception as e:
@@ -113,19 +126,27 @@ def process_frame(frame_b64: str) -> dict:
     return {}
 
 def main():
-    cap = cv2.VideoCapture(0)
+    import os
+    video_path = os.path.join(os.path.dirname(__file__), '..', 'data', 'sample_construction.mp4')
+    
+    if os.path.exists(video_path):
+        print(f"Using sample video: {video_path}")
+        cap = cv2.VideoCapture(video_path)
+    else:
+        print("Sample video not found, falling back to webcam.")
+        cap = cv2.VideoCapture(0)
+        
     cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
     
     if not cap.isOpened():
-        print("Error: Could not open webcam.")
+        print("Error: Could not open video source.")
         return
         
     print("🥽 FIELDPILOT AI - Glasses Simulator")
     print(f"   API: {API_URL}")
     print("   Press Q to quit")
     
-    last_process = 0
     last_result = {
         "scene_description": "Monitoring...",
         "urgency": "low",
@@ -133,19 +154,22 @@ def main():
         "spoken_response": ""
     }
     last_spoken = ""
+    is_processing = False
     
     while True:
         ret, frame = cap.read()
         if not ret:
             break
         
-        now = time.time()
+        # Add slight delay so video doesn't play too fast
+        time.sleep(0.03) 
         
-        if now - last_process >= SAMPLE_INTERVAL:
+        if not is_processing:
+            is_processing = True
             frame_b64 = encode_frame(frame)
             
             def process_bg():
-                nonlocal last_result, last_spoken
+                nonlocal last_result, last_spoken, is_processing
                 result = process_frame(frame_b64)
                 if result:
                     last_result = result
@@ -154,15 +178,50 @@ def main():
                     if spoken and spoken != last_spoken and urgency in ["high", "critical", "medium"]:
                         speak(spoken)
                         last_spoken = spoken
+                is_processing = False
                         
             threading.Thread(target=process_bg, daemon=True).start()
-            last_process = now
             
         display_frame = draw_hud(frame.copy(), last_result)
         cv2.imshow("FieldPilot AI Glasses View [Press Q to quit]", display_frame)
         
-        if cv2.waitKey(1) & 0xFF == ord('q'):
+        key = cv2.waitKey(1) & 0xFF
+        if key == ord('q'):
             break
+        elif key == ord('v'):
+            # Record audio query
+            try:
+                import sounddevice as sd
+                import scipy.io.wavfile as wav
+                import requests
+                
+                print("\n🎤 RECORDING FOR 5 SECONDS... SPEAK NOW!")
+                fs = 44100
+                duration = 5  # seconds
+                recording = sd.rec(int(duration * fs), samplerate=fs, channels=1, dtype='int16')
+                sd.wait()
+                print("✅ Recording complete. Sending to AI...")
+                
+                temp_wav = "query.wav"
+                wav.write(temp_wav, fs, recording)
+                
+                def send_voice():
+                    try:
+                        with open(temp_wav, "rb") as f:
+                            files = {"audio": ("query.wav", f, "audio/wav")}
+                            data = {"project_id": "P-001", "zone_id": "A12"}
+                            res = requests.post(f"{API_URL}/api/v1/voice/query", files=files, data=data)
+                            if res.status_code == 200:
+                                answer = res.json().get("response_text", "")
+                                print(f"\n🧠 AI ANSWERS: {answer}")
+                                speak(answer)
+                    except Exception as e:
+                        print(f"Voice API Error: {e}")
+                
+                threading.Thread(target=send_voice, daemon=True).start()
+                
+            except Exception as e:
+                print(f"\n❌ Microphone error: {e}")
             
     cap.release()
     cv2.destroyAllWindows()

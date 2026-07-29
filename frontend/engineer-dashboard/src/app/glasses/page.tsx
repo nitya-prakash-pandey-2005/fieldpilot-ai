@@ -1,12 +1,15 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { GlassCard } from '@/components/ui/GlassCard';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { LiveIndicator } from '@/components/ui/LiveIndicator';
 import { GlassesFeedPanel } from '@/components/dashboard/GlassesFeedPanel';
 import { TranscriptPanel } from '@/components/dashboard/TranscriptPanel';
 import { ObservationPanel } from '@/components/dashboard/ObservationPanel';
+import { LiveCameraPanel } from '@/components/dashboard/LiveCameraPanel';
+import { analyzeSceneReal } from '@/lib/visionAnalysis';
 
 export const SCENARIOS = [
   {
@@ -68,6 +71,7 @@ export const SCENARIOS = [
 ];
 
 export default function GlassesPage() {
+  const router = useRouter();
   const [fps, setFps] = useState("30.0");
   const [latency, setLatency] = useState("12");
   const [gpu, setGpu] = useState("67");
@@ -81,6 +85,11 @@ export default function GlassesPage() {
   const [currentLanguage, setCurrentLanguage] = useState('EN 🇺🇸');
   const [currentWorker, setCurrentWorker] = useState('WRK-001');
 
+  // Mode: 'demo' = scenario mock, 'live' = real camera stream
+  const [mode, setMode] = useState<'demo' | 'live'>('demo');
+  const [phoneIp, setPhoneIp] = useState('192.168.1.100');
+  const [cameraSource, setCameraSource] = useState<'laptop' | 'phone' | 'video'>('laptop');
+
   useEffect(() => {
     const timer = setInterval(() => {
       setFps((28 + Math.random() * 4).toFixed(1));
@@ -93,31 +102,41 @@ export default function GlassesPage() {
   const handleScan = async (imageToScan: string, isCustom = false) => {
     setScanStatus('LOADING');
     setScanResult(null);
-    
+
     try {
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      
       let result;
       if (isCustom) {
-        result = {
-          name: "Custom Image Analysis",
-          image: imageToScan,
-          verdict: "UNCERTAIN",
-          issue: "Unknown Scene",
-          measured: "Manual review required",
-          required: "N/A",
-          deviation: "N/A",
-          confidence: "45%",
-          agentChain: "V1",
-          time: "3.5s"
-        };
+        // Real uploaded/captured photo — call the actual Vision + VLM
+        // pipeline (POST /api/v1/vision/understand) instead of returning a
+        // hardcoded "45% UNCERTAIN" result regardless of what was uploaded.
+        try {
+          result = await analyzeSceneReal(imageToScan, currentZone, currentLanguage.startsWith('EN') ? 'en' : currentLanguage.slice(0, 2).toLowerCase());
+        } catch (apiErr) {
+          console.error('Real vision analysis failed, backend may be unreachable:', apiErr);
+          result = {
+            name: "Custom Image Analysis",
+            image: imageToScan,
+            verdict: "UNCERTAIN",
+            issue: "Analysis unavailable",
+            measured: "Could not reach vision backend",
+            required: "N/A",
+            deviation: "N/A",
+            confidence: "N/A",
+            agentChain: "V1",
+            time: "—"
+          };
+        }
       } else {
+        // "DEMO SCENARIOS" mode — explicitly labeled as canned scenarios in
+        // the UI (the mode toggle literally says "DEMO SCENARIOS"), so this
+        // stays a scripted walkthrough rather than a live analysis call.
+        await new Promise(resolve => setTimeout(resolve, 1200));
         result = SCENARIOS.find(s => s.id === activeScenarioId);
       }
-      
+
       setScanResult(result);
       setScanStatus('RESULT');
-      
+
     } catch (e) {
       console.error(e);
       setScanStatus('IDLE');
@@ -150,7 +169,12 @@ export default function GlassesPage() {
             <span className="text-white text-xs font-medium tracking-wide">1 New Issue · Zone A12</span>
           </div>
           <div className="flex items-center gap-3">
-            <button className="text-[var(--text-muted)] hover:text-white text-[11px] font-bold transition-colors">View →</button>
+            <button
+              onClick={() => router.push('/issues')}
+              className="text-[var(--text-muted)] hover:text-white text-[11px] font-bold transition-colors"
+            >
+              View →
+            </button>
             <button className="text-[var(--text-muted)] hover:text-white text-xs" onClick={() => setShowToast(false)}>✕</button>
           </div>
         </div>
@@ -162,40 +186,94 @@ export default function GlassesPage() {
             <h1 className="text-xl font-bold tracking-tight text-[var(--text-primary)] font-display uppercase">Meta Glasses Stream</h1>
             <LiveIndicator isLive={true} />
           </div>
-          <div className="flex items-center gap-3">
-            <select 
-              value={currentZone} 
-              onChange={e => setCurrentZone(e.target.value)}
-              className="bg-black/40 border border-[var(--border-subtle)] text-[var(--text-secondary)] text-xs rounded px-2 py-1 outline-none focus:border-[var(--cyan)]"
-            >
-              <option value="A12">Zone A12</option>
-              <option value="B3">Zone B3</option>
-              <option value="C7">Zone C7</option>
-              <option value="D4">Zone D4</option>
-            </select>
-            
-            <select 
-              value={currentLanguage} 
-              onChange={e => setCurrentLanguage(e.target.value)}
-              className="bg-black/40 border border-[var(--border-subtle)] text-[var(--text-secondary)] text-xs rounded px-2 py-1 outline-none focus:border-[var(--cyan)]"
-            >
-              <option value="EN 🇺🇸">EN 🇺🇸</option>
-              <option value="HI 🇮🇳">हिंदी 🇮🇳</option>
-              <option value="AR 🇦🇪">العربية 🇦🇪</option>
-              <option value="TA 🇮🇳">தமிழ் 🇮🇳</option>
-              <option value="TE 🇮🇳">తెలుగు 🇮🇳</option>
-            </select>
 
-            <select 
-              value={currentWorker} 
-              onChange={e => setCurrentWorker(e.target.value)}
-              className="bg-black/40 border border-[var(--border-subtle)] text-[var(--text-secondary)] text-xs rounded px-2 py-1 outline-none focus:border-[var(--cyan)]"
+          {/* MODE TOGGLE */}
+          <div className="flex items-center gap-1 p-1 rounded-lg" style={{ background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.08)' }}>
+            <button
+              onClick={() => setMode('demo')}
+              className={`px-3 py-1 rounded text-xs font-bold transition-all duration-200 ${
+                mode === 'demo'
+                  ? 'bg-[var(--cyan)] text-black'
+                  : 'text-[var(--text-muted)] hover:text-white'
+              }`}
             >
-              <option value="WRK-001">WRK-001</option>
-              <option value="WRK-002">WRK-002</option>
-              <option value="WRK-003">WRK-003</option>
-            </select>
+              DEMO SCENARIOS
+            </button>
+            <button
+              onClick={() => setMode('live')}
+              className={`px-3 py-1 rounded text-xs font-bold transition-all duration-200 flex items-center gap-1.5 ${
+                mode === 'live'
+                  ? 'text-black'
+                  : 'text-[var(--text-muted)] hover:text-white'
+              }`}
+              style={mode === 'live' ? { background: '#00E676', boxShadow: '0 0 12px #00E67666' } : {}}
+            >
+              {mode === 'live' && <span className="w-1.5 h-1.5 rounded-full bg-black animate-pulse" />}
+              LIVE CAMERA
+            </button>
           </div>
+
+          {/* Live mode source config */}
+          {mode === 'live' && (
+            <div className="flex items-center gap-2">
+              <select
+                value={cameraSource}
+                onChange={e => setCameraSource(e.target.value as any)}
+                className="bg-black/40 border border-[var(--border-subtle)] text-[var(--text-secondary)] text-xs rounded px-2 py-1 outline-none focus:border-[var(--cyan)]"
+              >
+                <option value="laptop">💻 Laptop Webcam</option>
+                <option value="phone">📱 Phone (IP Webcam)</option>
+                <option value="video">🎬 Sample Video</option>
+              </select>
+              {cameraSource === 'phone' && (
+                <input
+                  type="text"
+                  placeholder="Phone IP (e.g. 192.168.1.42)"
+                  value={phoneIp}
+                  onChange={e => setPhoneIp(e.target.value)}
+                  className="bg-black/40 border border-[var(--border-subtle)] text-[var(--text-secondary)] text-xs rounded px-2 py-1 outline-none focus:border-[var(--cyan)] w-44"
+                />
+              )}
+            </div>
+          )}
+
+          {/* Demo mode selects */}
+          {mode === 'demo' && (
+            <div className="flex items-center gap-3">
+              <select 
+                value={currentZone} 
+                onChange={e => setCurrentZone(e.target.value)}
+                className="bg-black/40 border border-[var(--border-subtle)] text-[var(--text-secondary)] text-xs rounded px-2 py-1 outline-none focus:border-[var(--cyan)]"
+              >
+                <option value="A12">Zone A12</option>
+                <option value="B3">Zone B3</option>
+                <option value="C7">Zone C7</option>
+                <option value="D4">Zone D4</option>
+              </select>
+              
+              <select 
+                value={currentLanguage} 
+                onChange={e => setCurrentLanguage(e.target.value)}
+                className="bg-black/40 border border-[var(--border-subtle)] text-[var(--text-secondary)] text-xs rounded px-2 py-1 outline-none focus:border-[var(--cyan)]"
+              >
+                <option value="EN 🇺🇸">EN 🇺🇸</option>
+                <option value="HI 🇮🇳">हिंदी 🇮🇳</option>
+                <option value="AR 🇦🇪">العربية 🇦🇪</option>
+                <option value="TA 🇮🇳">தமிழ் 🇮🇳</option>
+                <option value="TE 🇮🇳">తెలుగు 🇮🇳</option>
+              </select>
+
+              <select 
+                value={currentWorker} 
+                onChange={e => setCurrentWorker(e.target.value)}
+                className="bg-black/40 border border-[var(--border-subtle)] text-[var(--text-secondary)] text-xs rounded px-2 py-1 outline-none focus:border-[var(--cyan)]"
+              >
+                <option value="WRK-001">WRK-001</option>
+                <option value="WRK-002">WRK-002</option>
+                <option value="WRK-003">WRK-003</option>
+              </select>
+            </div>
+          )}
         </div>
 
         <div className="flex items-center gap-4 text-xs font-mono">
@@ -218,34 +296,59 @@ export default function GlassesPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 xl:grid-cols-4 gap-4 flex-1">
-        
-        {/* Main Feed */}
-        <div className="lg:col-span-2 xl:col-span-3 flex flex-col h-[80vh]">
-          <GlassesFeedPanel 
-            scenarios={SCENARIOS}
-            activeScenarioId={activeScenarioId}
-            setActiveScenarioId={setActiveScenarioId}
-            scanStatus={scanStatus}
-            scanResult={scanResult}
-            customImage={customImage}
-            setCustomImage={setCustomImage}
-            onScan={handleScan}
-            onReset={handleReset}
+      {/* Live Camera Mode */}
+      {mode === 'live' && (
+        <div className="flex-1 min-h-0">
+          <LiveCameraPanel
+            workerId={currentWorker}
+            zoneId={currentZone}
+            apiBase={process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}
           />
+          {cameraSource !== 'laptop' && (
+            <div className="mt-3 px-4 py-2 rounded-lg text-xs font-mono text-center"
+                 style={{ background: 'rgba(0,191,255,0.08)', color: '#00BFFF', border: '1px solid rgba(0,191,255,0.25)' }}>
+              📱 Start pipeline with: python scripts/live_camera_pipeline.py --source {cameraSource}
+              {cameraSource === 'phone' ? ` --phone-ip ${phoneIp}` : ''}
+            </div>
+          )}
         </div>
-        
-        {/* Real-time transcript & logs */}
-        <div className="flex flex-col gap-4 xl:col-span-1 h-[80vh]">
-          <div className="h-[45%] shrink-0">
-            <TranscriptPanel scanStatus={scanStatus} scanResult={scanResult} />
+      )}
+
+      {/* Demo Mode */}
+      {mode === 'demo' && (
+        <div className="grid grid-cols-1 lg:grid-cols-3 xl:grid-cols-4 gap-4 flex-1">
+          
+          {/* Main Feed */}
+          <div className="lg:col-span-2 xl:col-span-3 flex flex-col h-[80vh]">
+            <GlassesFeedPanel
+              scenarios={SCENARIOS}
+              activeScenarioId={activeScenarioId}
+              setActiveScenarioId={setActiveScenarioId}
+              scanStatus={scanStatus}
+              scanResult={scanResult}
+              customImage={customImage}
+              setCustomImage={setCustomImage}
+              onScan={handleScan}
+              onReset={handleReset}
+              setScanResult={setScanResult}
+              setScanStatus={setScanStatus}
+              workerId={currentWorker}
+              zoneId={currentZone}
+            />
           </div>
-          <div className="h-[55%] flex flex-col">
-            <ObservationPanel scanResult={scanResult} />
+          
+          {/* Real-time transcript & logs */}
+          <div className="flex flex-col gap-4 xl:col-span-1 h-[80vh]">
+            <div className="h-[45%] shrink-0">
+              <TranscriptPanel scanStatus={scanStatus} scanResult={scanResult} />
+            </div>
+            <div className="h-[55%] flex flex-col">
+              <ObservationPanel scanResult={scanResult} zoneId={currentZone} workerId={currentWorker} />
+            </div>
           </div>
+          
         </div>
-        
-      </div>
+      )}
     </div>
   );
 }

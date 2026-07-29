@@ -1,15 +1,24 @@
 import os
+import sys
 import json
 import logging
+import uuid
 from dataclasses import dataclass
 from typing import Optional, List, Dict, Any
 from pydantic import BaseModel
-import asyncpg
 from neo4j import AsyncGraphDatabase
 
 from agents.learning.retry_queue import queue_failed_write
 
 logger = logging.getLogger(__name__)
+
+# Make the api/ package (models.*, db.py) importable — same convention as
+# agents/compliance/validator.py and agents/notification/router.py.
+_API_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../api"))
+if _API_DIR not in sys.path:
+    sys.path.append(_API_DIR)
+
+QDRANT_COLLECTION = "learning_incidents"
 
 class IncidentResolutionPayload(BaseModel):
     incident_id: str
@@ -32,10 +41,13 @@ class IngestResult:
 
 class LearningIngestor:
     def __init__(self):
-        self.pg_uri = os.getenv("POSTGRES_URI", "postgresql://postgres:password@localhost:5432/askthewall")
         self.neo4j_uri = os.getenv("NEO4J_URI", "bolt://localhost:7687")
         self.neo4j_user = os.getenv("NEO4J_USER", "neo4j")
-        self.neo4j_password = os.getenv("NEO4J_PASSWORD", "password")
+        # Matches the real credential in docker-compose.yml's NEO4J_AUTH and
+        # api/db.py's hardcoded NEO4J_AUTH — this previously defaulted to
+        # "password", which never matched the actual container and would
+        # have failed to authenticate regardless of whether Neo4j was up.
+        self.neo4j_password = os.getenv("NEO4J_PASSWORD", "askthewall_dev")
 
     async def ingest(self, payload: IncidentResolutionPayload) -> dict:
         """
@@ -89,20 +101,39 @@ class LearningIngestor:
         return response
 
     async def _write_postgres(self, payload: IncidentResolutionPayload):
-        conn = await asyncpg.connect(self.pg_uri)
-        try:
-            await conn.execute('''
-                INSERT INTO resolved_incidents (
-                    incident_id, project_id, zone_id, asset_type, issue_type,
-                    measurement_at_detection, spec_value, resolution, photos, outcome_metrics, tags
-                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-                ON CONFLICT (incident_id) DO NOTHING
-            ''', 
-            payload.incident_id, payload.project_id, payload.zone_id, payload.asset_type, payload.issue_type,
-            payload.measurement_at_detection, payload.spec_value, json.dumps(payload.resolution),
-            json.dumps(payload.photos), json.dumps(payload.outcome_metrics), payload.tags)
-        finally:
-            await conn.close()
+        """
+        Writes to the same unified `fieldpilot` Postgres DB/ORM as
+        everything else (FieldIssue, ComplianceEvent, NotificationAudit).
+        Previously this connected via raw asyncpg to a separate `askthewall`
+        database that no longer exists — this table (and the whole
+        Learning Agent) would have failed to connect at all against the
+        current unified docker-compose stack until this fix.
+        """
+        from db import async_session
+        from sqlalchemy import select
+        from models.resolved_incident import ResolvedIncident
+
+        async with async_session() as session:
+            existing = await session.execute(
+                select(ResolvedIncident).where(ResolvedIncident.incident_id == payload.incident_id)
+            )
+            if existing.scalar_one_or_none() is not None:
+                return  # ON CONFLICT (incident_id) DO NOTHING, same as before
+
+            session.add(ResolvedIncident(
+                incident_id=payload.incident_id,
+                project_id=payload.project_id,
+                zone_id=payload.zone_id,
+                asset_type=payload.asset_type,
+                issue_type=payload.issue_type,
+                measurement_at_detection=payload.measurement_at_detection,
+                spec_value=payload.spec_value,
+                resolution=json.dumps(payload.resolution),
+                photos=json.dumps(payload.photos),
+                outcome_metrics=json.dumps(payload.outcome_metrics),
+                tags=json.dumps(payload.tags),
+            ))
+            await session.commit()
 
     async def _write_neo4j(self, payload: IncidentResolutionPayload):
         # We attempt a real connection. If Neo4j isn't running, it raises an exception which is caught by ingest()
@@ -126,6 +157,69 @@ class LearningIngestor:
         await driver.close()
 
     async def _write_qdrant(self, payload: IncidentResolutionPayload):
-        # We simulate a Qdrant failure since Qdrant isn't natively running on windows in this environment
-        # and there is no Qdrant client installed.
-        raise ConnectionRefusedError("Qdrant connection refused")
+        """
+        Real embed + upsert into Qdrant — previously this unconditionally
+        raised ConnectionRefusedError regardless of environment (a
+        permanent stub, not a real attempt that happened to fail). Qdrant
+        now runs fine in the unified docker-compose.yml (verified for RAG
+        elsewhere in this codebase), so there's no reason for this to stay
+        fake. Uses the same BAAI/bge-small-en-v1.5 model standardized
+        across agents/drawing/indexer.py and agents/memory/retriever.py so
+        incidents are embedded compatibly with the rest of the RAG stack.
+        """
+        import asyncio
+        from qdrant_client import QdrantClient
+        from qdrant_client.http.models import Distance, VectorParams, PointStruct
+        from agents.drawing.indexer import EMBEDDING_MODEL, EMBEDDING_DIM
+
+        resolution = payload.resolution or {}
+        summary = (
+            f"Zone {payload.zone_id}: {payload.asset_type} {payload.issue_type.replace('_', ' ')}. "
+            f"Measured {payload.measurement_at_detection}, spec {payload.spec_value}. "
+            f"Resolution: {resolution.get('action_taken', '')} {resolution.get('resolution_notes', '')}"
+        ).strip()
+
+        def _embed_and_upsert():
+            model = _get_incident_embedder()
+            client = QdrantClient(url=os.getenv("QDRANT_URL", "http://localhost:6333"))
+            try:
+                collections = client.get_collections().collections
+                if not any(c.name == QDRANT_COLLECTION for c in collections):
+                    client.create_collection(
+                        collection_name=QDRANT_COLLECTION,
+                        vectors_config=VectorParams(size=EMBEDDING_DIM, distance=Distance.COSINE),
+                    )
+            except Exception:
+                pass  # already exists
+
+            vector = model.encode(summary).tolist()
+            client.upsert(
+                collection_name=QDRANT_COLLECTION,
+                points=[PointStruct(
+                    id=str(uuid.uuid5(uuid.NAMESPACE_URL, payload.incident_id)),
+                    vector=vector,
+                    payload={
+                        "incident_id": payload.incident_id,
+                        "zone_id": payload.zone_id,
+                        "asset_type": payload.asset_type,
+                        "issue_type": payload.issue_type,
+                        "text": summary,
+                    },
+                )],
+            )
+
+        # SentenceTransformer.encode + QdrantClient are both blocking calls.
+        await asyncio.to_thread(_embed_and_upsert)
+
+
+_incident_embedder = None
+
+
+def _get_incident_embedder():
+    """Lazily load and cache the embedding model across calls (module-level singleton)."""
+    global _incident_embedder
+    if _incident_embedder is None:
+        from sentence_transformers import SentenceTransformer
+        from agents.drawing.indexer import EMBEDDING_MODEL
+        _incident_embedder = SentenceTransformer(EMBEDDING_MODEL)
+    return _incident_embedder

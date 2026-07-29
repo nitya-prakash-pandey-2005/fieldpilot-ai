@@ -1,33 +1,53 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { GlassCard } from '../ui/GlassCard';
-import { useAPIData } from '@/hooks/useAPIData';
 import { StatusBadge } from '../ui/StatusBadge';
+import { LiveIndicator } from '../ui/LiveIndicator';
+import { useZones, getRiskLevel, Zone } from '@/hooks/useZones';
 
-const DEMO_ZONES = [
-  { id: "A12", name: "Zone A12", risk_score: 0.87, status: "critical", active_issues: 3, coordinates: { x: 45, y: 30 }, description: "Rebar installation in progress" },
-  { id: "B3", name: "Zone B3", risk_score: 0.34, status: "medium", active_issues: 1, coordinates: { x: 70, y: 55 }, description: "MEP rough-in complete" },
-  { id: "C7", name: "Zone C7", risk_score: 0.12, status: "low", active_issues: 0, coordinates: { x: 25, y: 75 }, description: "Fire suppression inspection passed" },
-  { id: "D4", name: "Zone D4", risk_score: 0.61, status: "high", active_issues: 2, coordinates: { x: 60, y: 20 }, description: "Formwork assembly" }
+// Positions are a lookup keyed by zone_code, not real site-plan coordinates
+// — the Zone schema has no spatial data yet (would need a BIM/site-plan
+// integration to place zones by their actual geometry). Unknown zone codes
+// fall back to DEFAULT_POSITION rather than being dropped from the map.
+const ZONE_POSITIONS: Record<string, { x: number; y: number }> = {
+  A12: { x: 27, y: 27 },
+  D4: { x: 72, y: 27 },
+  C7: { x: 22, y: 72 },
+  B3: { x: 67, y: 72 },
+};
+const DEFAULT_POSITION = { x: 50, y: 50 };
+
+const DEMO_ZONES: Zone[] = [
+  { id: "z-1", zone_code: "A12", name: "Zone A12", current_activity: "Rebar installation in progress", risk_level: "critical", risk_score: 85, active_worker_count: 14, open_issue_count: 3, last_scored_at: "" },
+  { id: "z-4", zone_code: "D4", name: "Zone D4", current_activity: "Formwork assembly", risk_level: "elevated", risk_score: 61, active_worker_count: 9, open_issue_count: 2, last_scored_at: "" },
+  { id: "z-3", zone_code: "C7", name: "Zone C7", current_activity: "Fire suppression inspection passed", risk_level: "normal", risk_score: 12, active_worker_count: 22, open_issue_count: 0, last_scored_at: "" },
+  { id: "z-2", zone_code: "B3", name: "Zone B3", current_activity: "MEP rough-in complete", risk_level: "elevated", risk_score: 45, active_worker_count: 8, open_issue_count: 1, last_scored_at: "" },
 ];
 
 export function LiveSiteMap() {
-  const { data: zones } = useAPIData('/api/v1/graph/project/P-001/zones', DEMO_ZONES);
-  const [activeZone, setActiveZone] = useState<any>(null);
+  const { zones: liveZones, connectionStatus } = useZones("default-project");
+  const zones = liveZones.length > 0 ? liveZones : DEMO_ZONES;
+  const [activeZone, setActiveZone] = useState<Zone | null>(null);
 
-  // Helper to determine style based on risk score
+  // Helper to determine style based on risk score (0-100), matching the
+  // same 3-tier risk model as useZones.getRiskLevel everywhere else in
+  // the app instead of a 4th ad hoc "HIGH" tier this component used to
+  // invent on its own.
   const getZoneStyle = (score: number) => {
-    if (score >= 0.8) return { fill: 'rgba(255,59,59,0.18)', stroke: 'rgba(255,59,59,0.6)', pulse: true, badge: 'CRITICAL' };
-    if (score >= 0.6) return { fill: 'rgba(255,140,0,0.15)', stroke: 'rgba(255,140,0,0.5)', pulse: false, badge: 'HIGH' };
-    if (score >= 0.3) return { fill: 'rgba(255,179,0,0.12)', stroke: 'rgba(255,179,0,0.4)', pulse: false, badge: 'WARNING' };
+    const level = getRiskLevel(score);
+    if (level === 'critical') return { fill: 'rgba(255,59,59,0.18)', stroke: 'rgba(255,59,59,0.6)', pulse: true, badge: 'CRITICAL' };
+    if (level === 'elevated') return { fill: 'rgba(255,179,0,0.12)', stroke: 'rgba(255,179,0,0.4)', pulse: false, badge: 'WARNING' };
     return { fill: 'rgba(0,200,81,0.12)', stroke: 'rgba(0,200,81,0.4)', pulse: false, badge: 'PASS' };
   };
 
   return (
     <GlassCard className="h-full flex flex-col min-h-[400px]">
       <div className="p-4 border-b border-[var(--border-subtle)] flex items-center justify-between">
-        <h2 className="text-sm font-semibold tracking-wide text-[var(--text-primary)] uppercase">Live Site Map</h2>
+        <div className="flex items-center gap-2">
+          <h2 className="text-sm font-semibold tracking-wide text-[var(--text-primary)] uppercase">Live Site Map</h2>
+          <LiveIndicator isLive={connectionStatus === 'live'} />
+        </div>
         <div className="flex gap-3 text-xs text-[var(--text-muted)]">
           <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-[var(--fail)]" /> Critical</span>
           <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-[var(--amber)]" /> Warning</span>
@@ -91,21 +111,22 @@ export function LiveSiteMap() {
         </svg>
 
         {/* Floating active markers for zones */}
-        {zones.map((zone: any) => {
+        {zones.map((zone: Zone) => {
           const style = getZoneStyle(zone.risk_score);
           const isSelected = activeZone?.id === zone.id;
-          
+          const pos = ZONE_POSITIONS[zone.zone_code] || DEFAULT_POSITION;
+
           // Custom class for A12 critical pulse
-          const isCriticalA12 = zone.id === 'A12';
-          
+          const isCriticalA12 = zone.zone_code === 'A12';
+
           return (
-            <div 
+            <div
               key={zone.id}
               className={`absolute flex items-center justify-center cursor-pointer transition-all duration-300 pointer-events-auto
                 ${style.pulse ? 'animate-pulse' : ''} ${isSelected ? 'scale-110 z-20' : 'hover:scale-105 z-10'}`}
               style={{
-                left: `${zone.coordinates.x}%`,
-                top: `${zone.coordinates.y}%`,
+                left: `${pos.x}%`,
+                top: `${pos.y}%`,
                 width: isCriticalA12 ? '45%' : '8%', // For A12 we want to highlight the whole room if selected, but for now just place a marker
                 height: isCriticalA12 ? '45%' : '8%',
                 transform: isCriticalA12 ? 'translate(-38.8%, -38.8%)' : 'translate(-50%, -50%)', // Centered on A12
@@ -119,11 +140,11 @@ export function LiveSiteMap() {
               {/* Only show pin dot for non-A12 for cleaner look, A12 gets the dashed border */}
               {!isCriticalA12 && (
                  <span className="text-[8px] font-bold text-white tracking-widest bg-black/40 px-1 py-0.5 rounded backdrop-blur-sm" style={{ fontFamily: 'var(--font-mono)' }}>
-                   {zone.id}
+                   {zone.zone_code}
                  </span>
               )}
-              {/* Active Observation blip mock */}
-              {(zone.id === 'D4' || zone.id === 'C7') && !isCriticalA12 && (
+              {/* Active Observation blip when this zone has open issues */}
+              {zone.open_issue_count > 0 && !isCriticalA12 && (
                 <div className="absolute w-2 h-2 rounded-full bg-[var(--cyan)] shadow-[0_0_8px_var(--cyan)] animate-ping" />
               )}
             </div>
@@ -140,7 +161,7 @@ export function LiveSiteMap() {
                 <h3 className="text-xl font-bold font-mono text-[var(--text-primary)]">{activeZone.name}</h3>
                 <StatusBadge status={getZoneStyle(activeZone.risk_score).badge} />
               </div>
-              <p className="text-xs text-[var(--text-secondary)]">{activeZone.description}</p>
+              <p className="text-xs text-[var(--text-secondary)]">{activeZone.current_activity}</p>
             </div>
             <button onClick={() => setActiveZone(null)} className="text-[var(--text-muted)] hover:text-white">✕</button>
           </div>
@@ -149,13 +170,13 @@ export function LiveSiteMap() {
             <div className="bg-[var(--bg-surface)] p-3 rounded-lg border border-[var(--border-subtle)]">
               <span className="text-[10px] uppercase text-[var(--text-muted)] tracking-wider">Risk Score</span>
               <div className="text-2xl font-bold font-mono mt-1" style={{ color: getZoneStyle(activeZone.risk_score).stroke }}>
-                {(activeZone.risk_score * 100).toFixed(1)}%
+                {activeZone.risk_score.toFixed(1)}%
               </div>
             </div>
             <div className="bg-[var(--bg-surface)] p-3 rounded-lg border border-[var(--border-subtle)]">
               <span className="text-[10px] uppercase text-[var(--text-muted)] tracking-wider">Active Issues</span>
               <div className="text-xl font-bold mt-1 text-[var(--text-primary)]">
-                {activeZone.active_issues} detected
+                {activeZone.open_issue_count} detected
               </div>
             </div>
             <button className="w-full py-2.5 bg-[var(--cyan-dim)] text-[var(--cyan)] border border-[var(--cyan)]/30 rounded-lg text-xs font-bold tracking-widest hover:bg-[var(--cyan)]/20 transition-colors">

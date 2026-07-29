@@ -1,19 +1,27 @@
 import os
 import json
-import base64
-from groq import Groq
+import requests
 from dotenv import load_dotenv
 
 load_dotenv()
 
+# Was Groq (llama-3.2-11b-vision-preview) — Groq has since decommissioned
+# every vision-capable model on this account (confirmed live against
+# /v1/models: only text/audio models remain). Switched to Gemini, which the
+# project already has a working key for (agents/voice/tts.py uses the same
+# GEMINI_API_KEY for TTS) and which supports real image+text input with
+# structured JSON output via generateContent, same REST pattern as tts.py
+# and utils/llm_client.py's Gemini branch.
+GEMINI_VLM_MODEL = os.getenv("GEMINI_VLM_MODEL", "gemini-flash-latest")
+
+
 class VLMAnalyzer:
     def __init__(self):
-        self.api_key = os.getenv("GROQ_API_KEY") or "dummy-key-for-demo"
+        self.api_key = os.getenv("GEMINI_API_KEY")
         if not self.api_key:
-            print("WARNING: GROQ_API_KEY not set. VLM Analyzer will fail.")
-        self.client = Groq(api_key=self.api_key)
-        self.model_name = "llama-3.2-11b-vision-preview"
-        print(f"VLM loaded via Groq API: {self.model_name}")
+            print("WARNING: GEMINI_API_KEY not set. VLM Analyzer will fail.")
+        self.model_name = GEMINI_VLM_MODEL
+        print(f"VLM loaded via Gemini API: {self.model_name}")
 
     async def analyze_scene(
         self,
@@ -23,9 +31,9 @@ class VLMAnalyzer:
         worker_query: str = None,
         project_context: str = ""
     ) -> dict:
-        
+
         query = worker_query or "What is happening in this construction scene? Any safety issues or compliance concerns?"
-        
+
         system_prompt = f"""You are an AI construction site assistant seeing through a worker's smart glasses.
 Zone: {zone_id}
 Language to respond in: {language}
@@ -44,32 +52,31 @@ Analyze the scene and respond EXACTLY in this JSON format:
 }}
 """
 
-        messages = [
-            {
-                "role": "user",
-                "content": [
-                    {"type": "text", "text": f"{system_prompt}\n\nWorker question: {query}"},
-                    {
-                        "type": "image_url",
-                        "image_url": {
-                            "url": f"data:image/jpeg;base64,{image_base64}",
-                        },
-                    },
-                ],
-            }
-        ]
+        if not self.api_key:
+            return self._error_result("GEMINI_API_KEY not configured")
+
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{self.model_name}:generateContent?key={self.api_key}"
+        payload = {
+            "contents": [
+                {
+                    "role": "user",
+                    "parts": [
+                        {"text": f"{system_prompt}\n\nWorker question: {query}"},
+                        {"inline_data": {"mime_type": "image/jpeg", "data": image_base64}},
+                    ],
+                }
+            ],
+            "generationConfig": {
+                "temperature": 0.1,
+                "responseMimeType": "application/json",
+            },
+        }
 
         try:
-            response = self.client.chat.completions.create(
-                model=self.model_name,
-                messages=messages,
-                temperature=0.1,
-                max_tokens=1024,
-                response_format={"type": "json_object"}
-            )
-            
-            output = response.choices[0].message.content
-            
+            resp = requests.post(url, headers={"Content-Type": "application/json"}, json=payload, timeout=30)
+            resp.raise_for_status()
+            output = resp.json()["candidates"][0]["content"]["parts"][0]["text"]
+
             try:
                 return json.loads(output)
             except json.JSONDecodeError:
@@ -77,20 +84,23 @@ Analyze the scene and respond EXACTLY in this JSON format:
                 start = output.find('{')
                 end = output.rfind('}') + 1
                 return json.loads(output[start:end])
-            
+
         except Exception as e:
             print(f"VLM Analysis Error: {e}")
-            return {
-                "scene_description": f"Error analyzing scene: {str(e)}",
-                "work_type": "Unknown",
-                "safety_hazards": [],
-                "compliance_issues": [],
-                "urgency": "low",
-                "spoken_response": "I encountered an error analyzing this scene.",
-                "engineer_alert_needed": False,
-                "confidence": 0.0
-            }
+            return self._error_result(str(e))
+
+    def _error_result(self, error: str) -> dict:
+        return {
+            "scene_description": f"Error analyzing scene: {error}",
+            "work_type": "Unknown",
+            "safety_hazards": [],
+            "compliance_issues": [],
+            "urgency": "low",
+            "spoken_response": "I encountered an error analyzing this scene.",
+            "engineer_alert_needed": False,
+            "confidence": 0.0
+        }
 
     @classmethod
     def warmup(cls):
-        print("Warming up VLM (Groq API)...")
+        print("Warming up VLM (Gemini API)...")

@@ -2,7 +2,17 @@
 
 import React, { useRef, useState, useEffect } from 'react';
 import { GlassCard } from '../ui/GlassCard';
-import { Upload, RefreshCw, Play, Loader2, Glasses as GlassesIcon, Camera as CameraIcon, Upload as UploadIcon } from 'lucide-react';
+import { Upload, RefreshCw, Play, Loader2, Glasses as GlassesIcon, Camera as CameraIcon, Upload as UploadIcon, Radio } from 'lucide-react';
+import { toast } from 'sonner';
+import { analyzeSceneReal } from '@/lib/visionAnalysis';
+
+interface ZoneAdvisory {
+  zone_id: string;
+  asset_id: string;
+  severity: string;
+  message: string;
+  timestamp: string;
+}
 
 interface Props {
   scenarios: any[];
@@ -16,6 +26,8 @@ interface Props {
   onReset: () => void;
   setScanResult?: (result: any) => void;
   setScanStatus?: (status: 'IDLE' | 'LOADING' | 'RESULT') => void;
+  workerId?: string;
+  zoneId?: string;
 }
 
 export function GlassesFeedPanel({
@@ -29,17 +41,22 @@ export function GlassesFeedPanel({
   onScan,
   onReset,
   setScanResult,
-  setScanStatus
+  setScanStatus,
+  workerId = 'WRK-001',
+  zoneId = 'A12',
 }: Props) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
-  
+  const isAnalyzingRef = useRef(false);
+
   const [source, setSource] = useState<'upload' | 'webcam' | 'glasses'>('glasses');
   const [glassesConnected, setGlassesConnected] = useState(false);
   const [webcamActive, setWebcamActive] = useState(false);
   const [webcamError, setWebcamError] = useState<string | null>(null);
   const [webcamIntervalId, setWebcamIntervalId] = useState<NodeJS.Timeout | null>(null);
   const [wsConnection, setWsConnection] = useState<WebSocket | null>(null);
+  const [zoneAdvisory, setZoneAdvisory] = useState<ZoneAdvisory | null>(null);
+  const [zoneChannelConnected, setZoneChannelConnected] = useState(false);
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -61,9 +78,13 @@ export function GlassesFeedPanel({
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
         setWebcamActive(true);
-        
+
+        // Real analysis per captured frame (was picking a random demo
+        // scenario regardless of what the webcam actually saw). VLM calls
+        // take a few real seconds, so isAnalyzingRef skips a tick rather
+        // than overlapping requests on the fixed interval.
         const captureInterval = setInterval(async () => {
-          if (!videoRef.current) return;
+          if (!videoRef.current || isAnalyzingRef.current) return;
           const canvas = document.createElement('canvas');
           canvas.width = 640;
           canvas.height = 360;
@@ -72,13 +93,22 @@ export function GlassesFeedPanel({
             ctx.drawImage(videoRef.current, 0, 0, 640, 360);
             const base64 = canvas.toDataURL('image/jpeg', 0.8);
             setCustomImage(base64);
-            
-            const mockResult = scenarios[Math.floor(Math.random() * scenarios.length)];
-            setScanResult?.(mockResult);
-            setScanStatus?.('RESULT');
+
+            isAnalyzingRef.current = true;
+            setScanStatus?.('LOADING');
+            try {
+              const result = await analyzeSceneReal(base64, zoneId, 'en');
+              setScanResult?.(result);
+              setScanStatus?.('RESULT');
+            } catch (err) {
+              console.error('Webcam frame analysis failed:', err);
+              setScanStatus?.('IDLE');
+            } finally {
+              isAnalyzingRef.current = false;
+            }
           }
-        }, 2000);
-        
+        }, 4000);
+
         setWebcamIntervalId(captureInterval);
       }
     } catch (err: any) {
@@ -101,7 +131,9 @@ export function GlassesFeedPanel({
   };
 
   const connectGlasses = () => {
-    const ws = new WebSocket(`ws://127.0.0.1:8000/ws/glasses/WRK-001`);
+    const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+    const wsUrl = apiBase.replace("http://", "ws://").replace("https://", "wss://") + `/ws/glasses/${workerId}`;
+    const ws = new WebSocket(wsUrl);
     ws.onopen = () => setGlassesConnected(true);
     ws.onclose = () => setGlassesConnected(false);
     ws.onmessage = (event) => {
@@ -129,6 +161,33 @@ export function GlassesFeedPanel({
       disconnectGlasses();
     };
   }, []);
+
+  // Zone-scoped hazard advisory channel — real backend broadcast (see
+  // api/main.py's zone_advisory_ws / broadcast_zone_advisory, wired from
+  // ComplianceEngine.validate() on HIGH/CRITICAL results). This is
+  // independent of the source toggle above: "I'm a worker currently in
+  // this zone" holds regardless of which camera source is selected. Open
+  // a second browser tab with the same zoneId to see an advisory from one
+  // tab's hazard reach the other tab, but NOT a tab on a different zone.
+  useEffect(() => {
+    const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+    const wsUrl = apiBase.replace("http://", "ws://").replace("https://", "wss://") + `/ws/zone/${zoneId}`;
+    const ws = new WebSocket(wsUrl);
+    ws.onopen = () => setZoneChannelConnected(true);
+    ws.onclose = () => setZoneChannelConnected(false);
+    ws.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        if (data.type === 'ZONE_HAZARD_ADVISORY') {
+          setZoneAdvisory(data);
+          toast.error(`Zone ${data.zone_id} advisory: ${data.message}`, { duration: 8000 });
+        }
+      } catch {
+        // ignore malformed advisory payloads
+      }
+    };
+    return () => ws.close();
+  }, [zoneId]);
 
   useEffect(() => {
     stopWebcam();
@@ -220,6 +279,27 @@ export function GlassesFeedPanel({
           </button>
         </div>
       </div>
+
+      <div className="flex items-center justify-between mb-3 px-0.5">
+        <div className="flex items-center gap-1.5 text-[10px] font-mono text-[var(--text-muted)]">
+          <Radio size={11} className={zoneChannelConnected ? 'text-[var(--pass)]' : 'text-[var(--text-muted)]'} />
+          Zone {zoneId} advisory channel: {zoneChannelConnected ? 'connected' : 'connecting…'}
+        </div>
+      </div>
+
+      {zoneAdvisory && (
+        <div
+          className="mb-3 px-3 py-2 rounded-lg border flex items-center justify-between gap-3 text-xs animate-fade-in"
+          style={{
+            backgroundColor: zoneAdvisory.severity === 'CRITICAL' ? 'var(--fail-dim)' : 'var(--amber-dim)',
+            borderColor: zoneAdvisory.severity === 'CRITICAL' ? 'var(--fail)' : 'var(--amber)',
+            color: zoneAdvisory.severity === 'CRITICAL' ? 'var(--fail)' : 'var(--amber)',
+          }}
+        >
+          <span className="font-semibold">⚠ Zone {zoneAdvisory.zone_id} advisory (from another worker): {zoneAdvisory.message}</span>
+          <button onClick={() => setZoneAdvisory(null)} className="opacity-70 hover:opacity-100 shrink-0 cursor-pointer">✕</button>
+        </div>
+      )}
 
       {/* 1. Viewport Height Fix */}
       <div id="glasses-viewport" className="flex-1 w-full relative flex items-center justify-center overflow-hidden bg-[#050b14] border border-[var(--border-muted)] rounded-lg min-h-[460px]">

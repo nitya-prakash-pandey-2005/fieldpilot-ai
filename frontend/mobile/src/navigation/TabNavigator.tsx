@@ -3,15 +3,13 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Scan, AlertTriangle, Clock, MessageSquare, User, Mic } from 'lucide-react-native';
 
 import { ScanScreen } from '../screens/ScanScreen';
+import { IssuesScreen } from '../screens/IssuesScreen';
+import { HistoryScreen } from '../screens/HistoryScreen';
 import { AskAIScreen } from '../screens/AskAIScreen';
 import { VoiceScreen } from '../screens/VoiceScreen';
 import { ProfileScreen } from '../screens/ProfileScreen';
-import { View, Text } from 'react-native';
 
 const Tab = createBottomTabNavigator();
-
-// Placeholder screens for MVP
-const IssuesScreen = () => <View style={{flex:1, justifyContent:'center', alignItems:'center', backgroundColor: '#121212'}}><Text style={{color: 'white'}}>Active Issues</Text></View>;
 
 export function TabNavigator() {
   return (
@@ -31,15 +29,22 @@ export function TabNavigator() {
           tabBarIcon: ({ color, size }) => <Scan color={color} size={size} />
         }}
       />
-      <Tab.Screen 
-        name="ISSUES" 
-        component={IssuesScreen} 
+      <Tab.Screen
+        name="ISSUES"
+        component={IssuesScreen}
         options={{
           tabBarIcon: ({ color, size }) => <AlertTriangle color={color} size={size} />
         }}
       />
-      <Tab.Screen 
-        name="VOICE" 
+      <Tab.Screen
+        name="HISTORY"
+        component={HistoryScreen}
+        options={{
+          tabBarIcon: ({ color, size }) => <Clock color={color} size={size} />
+        }}
+      />
+      <Tab.Screen
+        name="VOICE"
         component={VoiceScreen} 
         options={{
           tabBarIcon: ({ color, size }) => <Mic color={color} size={size} />

@@ -73,8 +73,18 @@ export function AskAIScreen() {
               <Text style={[styles.userText, { color: '#FFF' }]}>{msg.content}</Text>
             ) : (
               <View>
-                <Text style={[styles.aiAnswer, { color: colors.text }]}>{msg.content.answer}</Text>
-                
+                {msg.content.answer ? (
+                  <Text style={[styles.aiAnswer, { color: colors.text }]}>{msg.content.answer}</Text>
+                ) : msg.content.evidence && msg.content.evidence.length > 0 ? (
+                  <Text style={[styles.aiAnswer, { color: colors.textSecondary, fontStyle: 'italic' }]}>
+                    No AI synthesis available — showing raw matching passages below.
+                  </Text>
+                ) : (
+                  <Text style={[styles.aiAnswer, { color: colors.textSecondary, fontStyle: 'italic' }]}>
+                    {msg.content.caution || 'No matching information found in project memory.'}
+                  </Text>
+                )}
+
                 {msg.content.evidence && msg.content.evidence.length > 0 && (
                   <View style={[styles.evidenceContainer, { borderTopColor: colors.border }]}>
                     <Text style={[styles.evidenceTitle, { color: colors.textSecondary }]}>Sources:</Text>
@@ -107,24 +117,27 @@ export function AskAIScreen() {
 
       <View style={[styles.inputContainer, { backgroundColor: colors.surface, borderTopColor: colors.border }]}>
         <TextInput
-          style={[styles.input, { 
-            backgroundColor: colors.bg, 
-            color: colors.text, 
-            borderColor: colors.border 
+          style={[styles.input, {
+            backgroundColor: colors.bg,
+            color: colors.text,
+            borderColor: colors.border
           }]}
-          placeholder={geminiApiKey ? "Ask Project Memory..." : "Please set API Key in Profile"}
+          placeholder="Ask Project Memory..."
           placeholderTextColor={colors.textSecondary}
           value={query}
           onChangeText={setQuery}
           onSubmitEditing={handleSend}
-          editable={!!geminiApiKey}
+          editable={!loading}
         />
-        <TouchableOpacity 
-          style={[styles.sendButton, { backgroundColor: geminiApiKey ? colors.primary : colors.surfaceVariant }]} 
+        {/* The server already has its own LLM configured (LLM_BACKEND) —
+            geminiApiKey here is only an optional per-request override, not
+            a requirement, so this no longer hard-disables on its absence. */}
+        <TouchableOpacity
+          style={[styles.sendButton, { backgroundColor: colors.primary, opacity: loading ? 0.5 : 1 }]}
           onPress={handleSend}
-          disabled={!geminiApiKey}
+          disabled={loading}
         >
-          <Send color={geminiApiKey ? "#fff" : colors.textSecondary} size={20} />
+          <Send color="#fff" size={20} />
         </TouchableOpacity>
       </View>
     </KeyboardAvoidingView>

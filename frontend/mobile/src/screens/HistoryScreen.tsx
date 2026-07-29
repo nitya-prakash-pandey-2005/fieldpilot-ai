@@ -3,6 +3,10 @@ import { View, Text, StyleSheet, ScrollView } from 'react-native';
 import { useTheme } from '../context/ThemeContext';
 import { Clock } from 'lucide-react-native';
 
+// No backend endpoint combines voice-query + scan history into one feed
+// today (voice queries aren't persisted anywhere server-side, and scans are
+// ephemeral vision analyses, not stored records) — this stays demo data
+// until such an endpoint exists, rather than fabricating a fake API call.
 const DEMO_HISTORY = [
   { id: 1, type: "VOICE", query: "What's the torque spec for the main beam bolts?", result: "Torque to 150 ft-lbs.", time: "Today, 10:42 AM" },
   { id: 2, type: "SCAN", query: "Rebar Inspection", result: "COMPLIANT. Spacing is correct.", time: "Today, 9:15 AM" },
@@ -31,7 +35,7 @@ export function HistoryScreen() {
               </View>
             </View>
             
-            <Text style={[styles.query, { color: colors.textPrimary }]}>{item.query}</Text>
+            <Text style={[styles.query, { color: colors.text }]}>{item.query}</Text>
             <View style={[styles.resultBox, { backgroundColor: colors.bg }]}>
               <Text style={[styles.result, { color: colors.textSecondary }]}>{item.result}</Text>
             </View>

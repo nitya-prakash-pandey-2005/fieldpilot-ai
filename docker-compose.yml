@@ -1,0 +1,58 @@
+# Single unified stack for the whole app — this used to be split across
+# this file (postgres db `fieldpilot`, used by api/db.py's SQLAlchemy ORM)
+# and infra/docker-compose.yml (a SECOND postgres `askthewall`, used by the
+# now-retired raw-asyncpg code in agents/compliance/validator.py and
+# agents/notification/router.py). Those two Postgres instances never saw
+# each other's data; everything now lives in one `fieldpilot` DB. Redis and
+# Neo4j are folded in here too instead of a separate compose file.
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: fieldpilot_db
+    environment:
+      POSTGRES_USER: fieldpilot
+      POSTGRES_PASSWORD: fieldpilot_password
+      POSTGRES_DB: fieldpilot
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U fieldpilot"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: fieldpilot_qdrant
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - qdrant_data:/qdrant/storage
+
+  redis:
+    image: redis:7-alpine
+    container_name: fieldpilot_redis
+    ports:
+      - "6379:6379"
+
+  neo4j:
+    image: neo4j:5.15-community
+    container_name: fieldpilot_neo4j
+    ports:
+      - "7474:7474"
+      - "7687:7687"
+    environment:
+      # Password matches the value hardcoded in api/db.py's NEO4J_AUTH —
+      # change both together if this ever needs to move to an env var.
+      NEO4J_AUTH: neo4j/askthewall_dev
+      NEO4J_PLUGINS: '["apoc", "graph-data-science"]'
+    volumes:
+      - neo4j_data:/data
+
+volumes:
+  postgres_data:
+  qdrant_data:
+  neo4j_data:

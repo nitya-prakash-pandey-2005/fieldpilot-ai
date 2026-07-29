@@ -38,6 +38,9 @@ class FieldIssue(Base):
     detected_by = Column(String, default="vision_agent")
     drawing_ref = Column(String, nullable=True)
     
+    # Data Flywheel metadata
+    is_hard_negative = Column(Integer, default=0) # 0 = false, 1 = true (used for nightly training)
+    
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 

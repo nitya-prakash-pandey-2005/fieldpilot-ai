@@ -119,12 +119,12 @@ export function useFieldIssues(projectId: string = 'default-project') {
     };
   }, [projectId, fetchIssues]);
 
-  const resolveIssue = async (issueId: string, note: string) => {
+  const resolveIssue = async (issueId: string, note: string, resolvedByUserId: string = 'current_user') => {
     try {
       const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000"}/api/v1/issues/${issueId}/resolve`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ resolved_by_user_id: 'current_user', resolution_note: note })
+        body: JSON.stringify({ resolved_by_user_id: resolvedByUserId, resolution_note: note })
       });
       if (!res.ok) throw new Error('Failed to resolve');
       
@@ -141,12 +141,12 @@ export function useFieldIssues(projectId: string = 'default-project') {
     }
   };
 
-  const escalateIssue = async (issueId: string, role: string, note: string) => {
+  const escalateIssue = async (issueId: string, role: string, note: string, escalatedByUserId: string = 'current_user') => {
     try {
       const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000"}/api/v1/issues/${issueId}/escalate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ escalated_by_user_id: 'current_user', escalate_to_role: role, note })
+        body: JSON.stringify({ escalated_by_user_id: escalatedByUserId, escalate_to_role: role, note })
       });
       if (!res.ok) throw new Error('Failed to escalate');
       
