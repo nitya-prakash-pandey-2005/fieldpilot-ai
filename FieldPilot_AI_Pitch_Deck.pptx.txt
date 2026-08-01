@@ -1,0 +1,219 @@
+TEAM FIELDPILOT AI
+FieldPilot.AI
+Hands-free AI site inspection — smart glasses watch the build, ten agents catch the deviation, and the worker hears the fix out loud.
+Nitya Prakash Pandey
+Biplab Keshari Mohanty
+Dilavesh Kanz Nidooli
+Hritik Roshan Maurya
+Open: we are team FieldPilot AI. Introduce the four members. One line on what we built — hands-free AI site inspection through smart glasses.
+1
+
+01 · THE PROBLEM
+Site inspection is manual, slow, and paper-heavy
+01
+Workers stop to document
+Pull out a tablet, take photos, fill forms by hand — tools down, progress paused.
+02
+RFIs take days
+A single deviation triggers paperwork, spec lookups, and email chains before anyone acts.
+03
+Hazards get missed
+Missing PPE, unguarded edges and spacing errors are spotted late — if at all.
+04
+Rework is expensive
+A 40mm rebar deviation caught after a pour costs six figures to fix.
+Construction inspection today is slow, manual and paper-heavy. Walk through the four pain points. The image is a real site — rebar, formwork, workers with hands full.
+2
+
+02 · THE SOLUTION
+The AI watches, detects, and files the paperwork — hands-free
+PASSIVE
+Hands stay on the tools
+Meta smart glasses stream what the worker sees. No tablets, no manual photos, no interrupting the build.
+AUTOMATIC
+10 agents do the work
+Vision, measurement, compliance and safety agents catch deviations and auto-draft the RFI with the spec quoted.
+INSTANT
+Spoken back in real time
+The worker hears the verdict through the glasses' open-ear speaker: "Stop work — rebar spacing 40mm above spec."
+WHY IT'S NEW
+Procore and Autodesk make workers do the inspection. FieldPilot does it for them — passively — and predicts the next failure before it happens.
+Our answer: passive, hands-free inspection. The glasses watch, the AI detects and files the paperwork, the worker keeps working and just hears what to do.
+3
+
+03 · MULTI-AGENT DATA FLOW
+From captured frame to spoken alert — Agent 1 to 10
+Walk the pipeline left to right: glasses capture, pocket phone relays (works offline on the NPU), cloud runs the ten-agent system, notification agent sends a TTS alert back to the worker's ear. Closed loop from sight to speech.
+4
+
+04 · TECH STACK
+What the system runs on
+HARDWARE
+Meta smart glasses
+RealWear / Vuzix fallback
+BLE beacons — zone tracking
+EDGE / OFFLINE
+Snapdragon / Apple NPU
+YOLOv9-tiny · Llama.cpp 3B
+WebRTC / RTMP streaming
+VISION & DEPTH
+YOLOv9 / RT-DETR
+Depth Anything V2
+NeRF / Gaussian Splatting
+LANGUAGE & VOICE
+LLaVA / Qwen-VL
+Llama-3 8B
+Whisper (speech-to-text)
+MEMORY & DATA
+Neo4j knowledge graph
+RAG spec retrieval
+BIM / Procore integration
+DELIVERY
+10-agent orchestration
+Web command dashboard
+WhatsApp + TTS alerts
+The full stack, layered from hardware up to delivery. Note the edge layer — quantized models run on the phone NPU so safety works even in WiFi dead zones.
+5
+
+05 · MODELS & THEIR WORK
+The models behind the agents
+TASK
+BASE MODEL
+FINE-TUNING
+DATA NEEDED
+Hazard Detection
+SAFETY
+YOLOv9 / RT-DETR
+Supervised bounding-box
+50,000+ annotated images of tools, PPE & hazards
+Measurement / Depth
+ACCURACY
+Depth Anything V2
+Synthetic BIM data
+LiDAR scans paired with 2D site images
+Multimodal Reasoning
+COMPLIANCE
+LLaVA / Qwen-VL
+LoRA adaptation
+Deviation images mapped to spec text
+Voice Processing
+VOICE
+Llama-3 8B / Whisper
+Instruction tuning
+Construction jargon & accents in noise
+Four model families, each with a base model, a fine-tuning method and the data it needs. This is the training pipeline if we're given glasses, GPUs and data.
+6
+
+06 · THE PRODUCT
+The command dashboard, live
+Downtown Tower Phase 2 · ● LIVE
+This is the working product — the site manager's command center. Live map, active issues, executive ROI summary, glasses feed, and risk-scored zones. Everything on the earlier slides shows up here.
+7
+
+07 · IMPACT & BENEFITS
+The numbers — and the benefits
+HEADLINE NUMBERS · ONE PROJECT
+23
+RFIs avoided / month
+$1.3M
+Cost saved on one project
+340h
+Worker hours saved
+94.3%
+AI detection accuracy
+PROJECTED IMPROVEMENT
+Development pace
+↑ 30–40%
+Project efficiency
+↑ 25–35%
+Service delivery
+↑ 40–50%
+Transparency & accountability
+↑ 35–40%
+Community well-being
+↑ 15–25%
+The numbers on one project. Lead with the four headline stats, then split impact into construction outcomes and worker outcomes.
+8
+
+08 · ROADMAP & RISK
+Path to production — and how we de-risk it
+PHASE 1
+MVP (Alpha)
+0 – 4 Months
+›
+Core data capture
+›
+Basic hazard detection
+›
+Pilot on a single site
+PHASE 2
+Edge & Scale (Beta)
+4 – 8 Months
+›
+Edge AI optimization
+›
+Offline mode & sync
+›
+RFI automation
+PHASE 3
+Enterprise (GA)
+8 – 18 Months
+›
+Full multi-agent system
+›
+Procore / BIM 360 integration
+›
+400+ worker scale
+PHASE 4
+Intelligence (Future)
+18+ Months
+›
+Predictive RFI (Agent 10)
+›
+Autonomous workflows
+›
+Continuous learning
+KEY RISKS → MITIGATION
+Limited connectivity in remote sites delays data
+▸
+Offline-first apps with auto-sync when back online
+Inconsistent field data affects project tracking
+▸
+Structured forms, geo-tagging & supervisor approval
+Resistance to adopting new technology
+▸
+Hands-on training, simple UI & gradual rollout
+Security & privacy of sensitive data
+▸
+Role-based access, encryption & audit trails
+AI predictions occasionally inaccurate
+▸
+Continuous retraining + human oversight
+Four-phase roadmap: MVP alpha, edge & scale beta, enterprise GA, then predictive intelligence.
+9
+
+09 · RESOURCES & REFERENCES
+Try it live & what we build on
+LIVE DEMO
+fieldpilot-ai-ovzd-xur5fuci3.vercel.app
+LIVE DASHBOARD
+Command center, issues, RFIs & site map — walkthrough on slide 07.
+DATASETS
+Construction PPE & hazard image sets (Roboflow / open)
+LiDAR-paired 2D site imagery for depth
+Spec-sheet & RFI text corpora for RAG
+BASE MODELS
+YOLOv9 · RT-DETR · Depth Anything V2
+LLaVA · Qwen-VL · Llama-3
+Whisper — all via Hugging Face
+TOOLS & FRAMEWORKS
+Neo4j knowledge graph
+WebRTC / RTMP streaming
+NVIDIA Maxine · llama.cpp
+INTEGRATIONS
+Procore · Autodesk BIM 360
+WhatsApp Business API
+BLE beacon SDKs
+TEAM FIELDPILOT AI — Nitya · Biplab · Dilavesh · Hritik
+Close on the references — the datasets, base models, tools and integrations we lean on during development. All open and available.
+10

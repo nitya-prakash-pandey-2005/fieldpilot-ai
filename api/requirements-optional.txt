@@ -1,0 +1,36 @@
+# FieldPilot AI — optional extras.
+#
+# None of these are needed for the API to start or for the core demo path. Each
+# one is imported behind a try/except and the feature degrades explicitly (the
+# relevant /status endpoint reports it as unavailable) rather than crashing.
+#
+#   pip install -r api/requirements-optional.txt
+
+# --- Agent 2: monocular metric depth (agents/measurement/depth.py) ---
+# Without these, measurement still works via ArUco marker or a known reference
+# object; only the no-props depth fallback is unavailable.
+# torch: install the CUDA build from pytorch.org on a GPU box; the plain wheel
+# below is CPU-only and depth inference will take ~1-2s per frame.
+torch
+transformers>=4.45          # Depth Anything V2 pipeline
+
+# --- Agent 8: real OCR on drawing title blocks ---
+# Without this the version-control scanner cannot read a physical drawing.
+paddleocr
+paddlepaddle
+
+# --- Agent 3: advanced document parsing ---
+# Falls back to PyPDF2 text extraction without these.
+docling
+llama-parse
+
+# --- notifications: real WhatsApp / SMS sends ---
+# Without it, those channels report as unconfigured instead of dispatching.
+twilio
+
+# --- local demo scripts only (scripts/glasses_simulator.py, live_camera_pipeline.py) ---
+pyttsx3                     # offline TTS fallback when Gemini TTS is unreachable
+sounddevice                 # microphone capture for the voice demo
+
+# --- evaluation plots ---
+matplotlib

@@ -1,28 +1,54 @@
+# FieldPilot AI — API gateway runtime dependencies.
+#
+# Everything here is imported UNGUARDED somewhere on a live request path, so a
+# missing entry is a 500 at demo time rather than a degraded feature. Optional
+# extras (depth model, OCR, document AI, training) live in the sections below —
+# install those explicitly.
+#
+#   pip install -r api/requirements.txt              # runs the API
+#   pip install -r api/requirements.txt -r api/requirements-optional.txt
+
+# --- web layer ---
 fastapi
 uvicorn[standard]
 pydantic>=2.0
+python-multipart      # FastAPI UploadFile / Form parsing — required by every upload route
+sse-starlette
+websockets
+httpx                 # real Slack webhook POSTs (agents/notification/router.py)
+requests
+
+# --- data stores ---
+sqlalchemy
+aiosqlite
+asyncpg
 redis
 neo4j
 qdrant-client
+
+# --- auth ---
+PyJWT                 # api/auth.py
+bcrypt                # api/auth.py password hashing
+email-validator       # pydantic EmailStr (api/routes/auth.py)
+
+# --- vision / measurement (Agents 1 & 2) ---
 ultralytics
-opencv-python
-python-dotenv
-sqlalchemy
-aiosqlite
-apscheduler
-sse-starlette
-asyncpg
-# Phase 0 Day 3 — ML pipeline
+opencv-python         # includes cv2.aruco, used by agents/measurement/calibration.py
+numpy
+scipy                 # lattice nearest-neighbour search (agents/measurement/rebar_spacing.py)
+pillow
+supervision
 onnx
 onnxruntime
-pillow
-scipy
-supervision
-websockets
-requests
-lapx          # Windows-compatible drop-in for 'lap' (required by BoT-SORT tracker)
-httpx         # real Slack webhook POSTs (agents/notification/router.py)
-twilio        # real WhatsApp/SMS sends (agents/notification/router.py)
-PyJWT         # JWT auth (api/auth.py)
-bcrypt        # password hashing (api/auth.py)
-email-validator  # pydantic EmailStr (api/routes/auth.py)
+lapx                  # Windows-compatible drop-in for 'lap' (BoT-SORT tracker)
+
+# --- language / voice ---
+groq                  # Whisper STT + LLM (agents/voice/transcriber.py) — unguarded import
+sentence-transformers # BGE embeddings for RAG (agents/memory/retriever.py)
+
+# --- misc ---
+python-dotenv
+apscheduler           # api/tasks/scoring.py
+pyyaml                # taxonomy / dataset configs
+PyPDF2                # agents/drawing/parser.py fallback parser
+reportlab             # PDF measurement reports

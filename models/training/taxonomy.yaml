@@ -1,0 +1,183 @@
+# FieldPilot-28 unified detection taxonomy.
+#
+# THIS FILE IS A CONTRACT. The runtime vision code (agents/vision/detector.py,
+# ppe_detector.py, equipment_detector.py, hazard_analyzer.py) keys off these
+# exact names. Changing an id or a name here means changing those files too.
+#
+# `classes` is the ordered target space — index == YOLO class id.
+# `sources` maps each upstream dataset's own label strings onto those ids.
+#   - Matching is case-insensitive and ignores -/_/space differences.
+#   - A source label mapped to `null` is intentionally DROPPED (not an error).
+#   - A source label absent from its mapping block raises during prepare, so a
+#     dataset silently changing its label set can't quietly corrupt training.
+
+classes:
+  # People & PPE
+  0:  person
+  1:  hardhat
+  2:  no_hardhat
+  3:  safety_vest
+  4:  no_safety_vest
+  5:  gloves
+  6:  no_gloves
+  7:  safety_glasses
+  8:  safety_boots
+  9:  face_mask
+  10: harness
+  11: no_harness
+  # Heavy equipment (struck-by hazard sources)
+  12: excavator
+  13: loader
+  14: dozer
+  15: crane
+  16: truck
+  17: forklift
+  18: roller
+  19: concrete_mixer
+  # Structural / MEP assets (what Agent 2 measures)
+  20: rebar
+  21: formwork
+  22: scaffold
+  23: conduit
+  24: pipe
+  25: cable_tray
+  # Site hazard context
+  26: safety_cone
+  27: guardrail
+
+# Groups used by the evaluator to report per-subset mAP (see TRAINING_PLAN §3).
+groups:
+  ppe:        [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
+  equipment:  [12, 13, 14, 15, 16, 17, 18, 19]
+  structural: [20, 21, 22, 23, 24, 25]
+  context:    [0, 26, 27]
+
+# Classes we expect to be data-starved. prepare_datasets.py warns loudly if a
+# class NOT on this list also lands under the threshold — that means a mapping
+# bug, not a known data gap.
+known_sparse: [6, 11, 25, 24]
+
+sources:
+
+  # ── D1: Roboflow "Construction Site Safety" (css-data) ──────────────────
+  D1:
+    kind: roboflow
+    workspace: roboflow-universe-projects
+    project: construction-site-safety
+    version: 30
+    format: yolov8
+    mapping:
+      "Hardhat":        1
+      "NO-Hardhat":     2
+      "Safety Vest":    3
+      "NO-Safety Vest": 4
+      "Mask":           9
+      "NO-Mask":        null   # absence of a dust mask is not a violation we alert on
+      "Person":         0
+      "Safety Cone":    26
+      "machinery":      null   # too coarse — MOCS/ACID give us the specific machine
+      "vehicle":        16
+
+  # ── D2: SH17 — 17-class fine-grained PPE ────────────────────────────────
+  D2:
+    kind: local          # download manually, point --d2-root at the extracted dir
+    format: yolo
+    mapping:
+      "person":       0
+      "helmet":       1
+      "head":         2      # a visible bare head == no_hardhat
+      "face":         null
+      "glasses":      7
+      "face_mask":    9
+      "face-guard":   null
+      "ear":          null
+      "earmuffs":     null
+      "hands":        null
+      "gloves":       5
+      "foot":         null
+      "shoes":        8
+      "safety-vest":  3
+      "tools":        null
+      "medical-suit": null
+      "safety-suit":  null
+
+  # ── D3: MOCS — Moving Objects in Construction Sites ─────────────────────
+  D3:
+    kind: local
+    format: coco
+    mapping:
+      "worker":           0
+      "static crane":     15
+      "hanging head":     null
+      "crane":            15
+      "roller":           18
+      "bulldozer":        14
+      "excavator":        12
+      "truck":            16
+      "loader":           13
+      "pump truck":       16
+      "concrete mixer":   19
+      "pile driving":     null
+      "other vehicle":    16
+
+  # ── D4: ACID — Alberta Construction Image Dataset ───────────────────────
+  D4:
+    kind: local
+    format: voc
+    mapping:
+      "excavator":     12
+      "loader":        13
+      "backhoe":       12
+      "dozer":         14
+      "bulldozer":     14
+      "grader":        null
+      "roller":        18
+      "dump_truck":    16
+      "truck":         16
+      "mixer_truck":   19
+      "crane":         15
+      "forklift":      17
+      "worker":        0
+
+  # ── D5: rebar detection/counting (several small Roboflow sets) ──────────
+  # Trained into the main model as class 20, AND kept separately as the
+  # single-class dataset that train_rebar_spacing.py uses (see §4).
+  D5:
+    kind: roboflow_multi
+    projects:
+      - {workspace: rebar-detection, project: rebar-counting, version: 1}
+      - {workspace: rebar,           project: rebar-detection-hgzbz, version: 3}
+    format: yolov8
+    mapping:
+      "rebar":         20
+      "rebar-end":     20
+      "steel":         20
+      "0":             20    # some sets ship unnamed single-class labels
+
+  # ── D6: CHV — Colour Helmet & Vest ──────────────────────────────────────
+  D6:
+    kind: local
+    format: yolo
+    mapping:
+      "person":     0
+      "vest":       3
+      "blue":       1        # colour-coded helmets — all map to hardhat
+      "red":        1
+      "white":      1
+      "yellow":     1
+
+  # ── D8: scaffold / formwork / guardrail sets ────────────────────────────
+  D8:
+    kind: roboflow_multi
+    projects:
+      - {workspace: scaffolding, project: scaffolding-detection, version: 2}
+      - {workspace: formwork,    project: formwork-detection,    version: 1}
+    format: yolov8
+    mapping:
+      "scaffold":     22
+      "scaffolding":  22
+      "formwork":     21
+      "shuttering":   21
+      "guardrail":    27
+      "handrail":     27
+      "railing":      27
