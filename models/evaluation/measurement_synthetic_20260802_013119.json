@@ -1,0 +1,735 @@
+{
+  "summary": {
+    "mode": "synthetic",
+    "timestamp": "2026-08-02T01:31:19.514698",
+    "weights": null,
+    "parameter": "spacing",
+    "n_cases": 72,
+    "n_measured": 71,
+    "refusals": 1,
+    "detection_rate": 0.9861,
+    "mean_abs_error_mm": 15.57,
+    "median_abs_error_mm": 0.9,
+    "p95_abs_error_mm": 50.3,
+    "max_abs_error_mm": 516.7,
+    "mean_latency_ms": 351.3
+  },
+  "rows": [
+    {
+      "truth_mm": 100.0,
+      "measured_mm": 99.8,
+      "error_mm": -0.20000000000000284,
+      "confidence": 0.98,
+      "calibration": "aruco",
+      "gaps": 6,
+      "case": "head-on d12",
+      "latency_ms": 122.06673622131348
+    },
+    {
+      "truth_mm": 100.0,
+      "measured_mm": 100.3,
+      "error_mm": 0.29999999999999716,
+      "confidence": 0.98,
+      "calibration": "aruco",
+      "gaps": 5,
+      "case": "persp0.10 d12",
+      "latency_ms": 75.21772384643555
+    },
+    {
+      "truth_mm": 100.0,
+      "measured_mm": 100.3,
+      "error_mm": 0.29999999999999716,
+      "confidence": 0.926,
+      "calibration": "aruco",
+      "gaps": 5,
+      "case": "persp0.18 d12",
+      "latency_ms": 72.97015190124512
+    },
+    {
+      "truth_mm": 100.0,
+      "measured_mm": 99.6,
+      "error_mm": -0.4000000000000057,
+      "confidence": 0.942,
+      "calibration": "aruco",
+      "gaps": 6,
+      "case": "head-on d16",
+      "latency_ms": 70.15132904052734
+    },
+    {
+      "truth_mm": 100.0,
+      "measured_mm": 100.1,
+      "error_mm": 0.09999999999999432,
+      "confidence": 0.98,
+      "calibration": "aruco",
+      "gaps": 5,
+      "case": "persp0.10 d16",
+      "latency_ms": 73.55427742004395
+    },
+    {
+      "truth_mm": 100.0,
+      "measured_mm": 67.8,
+      "error_mm": -32.2,
+      "confidence": 0.407,
+      "calibration": "aruco",
+      "gaps": 11,
+      "case": "persp0.18 d16",
+      "latency_ms": 72.42083549499512
+    },
+    {
+      "truth_mm": 100.0,
+      "measured_mm": 150.3,
+      "error_mm": 50.30000000000001,
+      "confidence": 0.533,
+      "calibration": "aruco",
+      "gaps": 1,
+      "case": "head-on d25",
+      "latency_ms": 55.81474304199219
+    },
+    {
+      "truth_mm": 100.0,
+      "measured_mm": 616.7,
+      "error_mm": 516.7,
+      "confidence": 0.533,
+      "calibration": "aruco",
+      "gaps": 1,
+      "case": "persp0.10 d25",
+      "latency_ms": 53.635358810424805
+    },
+    {
+      "truth_mm": 100.0,
+      "measured_mm": 98.9,
+      "error_mm": -1.0999999999999943,
+      "confidence": 0.943,
+      "calibration": "aruco",
+      "gaps": 4,
+      "case": "persp0.18 d25",
+      "latency_ms": 57.5566291809082
+    },
+    {
+      "truth_mm": 125.0,
+      "measured_mm": 125.1,
+      "error_mm": 0.09999999999999432,
+      "confidence": 0.98,
+      "calibration": "aruco",
+      "gaps": 5,
+      "case": "head-on d12",
+      "latency_ms": 87.64433860778809
+    },
+    {
+      "truth_mm": 125.0,
+      "measured_mm": 125.6,
+      "error_mm": 0.5999999999999943,
+      "confidence": 0.98,
+      "calibration": "aruco",
+      "gaps": 6,
+      "case": "persp0.10 d12",
+      "latency_ms": 119.7671890258789
+    },
+    {
+      "truth_mm": 125.0,
+      "measured_mm": 124.8,
+      "error_mm": -0.20000000000000284,
+      "confidence": 0.812,
+      "calibration": "aruco",
+      "gaps": 7,
+      "case": "persp0.18 d12",
+      "latency_ms": 111.99355125427246
+    },
+    {
+      "truth_mm": 125.0,
+      "measured_mm": 125.1,
+      "error_mm": 0.09999999999999432,
+      "confidence": 0.98,
+      "calibration": "aruco",
+      "gaps": 4,
+      "case": "head-on d16",
+      "latency_ms": 97.84555435180664
+    },
+    {
+      "truth_mm": 125.0,
+      "measured_mm": 125.5,
+      "error_mm": 0.5,
+      "confidence": 0.98,
+      "calibration": "aruco",
+      "gaps": 4,
+      "case": "persp0.10 d16",
+      "latency_ms": 87.15462684631348
+    },
+    {
+      "truth_mm": 125.0,
+      "measured_mm": 124.8,
+      "error_mm": -0.20000000000000284,
+      "confidence": 0.98,
+      "calibration": "aruco",
+      "gaps": 5,
+      "case": "persp0.18 d16",
+      "latency_ms": 90.53802490234375
+    },
+    {
+      "truth_mm": 125.0,
+      "measured_mm": 124.3,
+      "error_mm": -0.7000000000000028,
+      "confidence": 0.963,
+      "calibration": "aruco",
+      "gaps": 6,
+      "case": "head-on d25",
+      "latency_ms": 96.33684158325195
+    },
+    {
+      "truth_mm": 125.0,
+      "measured_mm": 125.6,
+      "error_mm": 0.5999999999999943,
+      "confidence": 0.98,
+      "calibration": "aruco",
+      "gaps": 6,
+      "case": "persp0.10 d25",
+      "latency_ms": 85.41321754455566
+    },
+    {
+      "truth_mm": 125.0,
+      "measured_mm": 40.2,
+      "error_mm": -84.8,
+      "confidence": 0.407,
+      "calibration": "aruco",
+      "gaps": 11,
+      "case": "persp0.18 d25",
+      "latency_ms": 89.01619911193848
+    },
+    {
+      "truth_mm": 150.0,
+      "measured_mm": 150.1,
+      "error_mm": 0.09999999999999432,
+      "confidence": 0.98,
+      "calibration": "aruco",
+      "gaps": 5,
+      "case": "head-on d12",
+      "latency_ms": 126.17230415344238
+    },
+    {
+      "truth_mm": 150.0,
+      "measured_mm": 152.7,
+      "error_mm": 2.6999999999999886,
+      "confidence": 0.98,
+      "calibration": "aruco",
+      "gaps": 6,
+      "case": "persp0.10 d12",
+      "latency_ms": 146.47936820983887
+    },
+    {
+      "truth_mm": 150.0,
+      "measured_mm": 129.3,
+      "error_mm": -20.69999999999999,
+      "confidence": 0.407,
+      "calibration": "aruco",
+      "gaps": 8,
+      "case": "persp0.18 d12",
+      "latency_ms": 154.85525131225586
+    },
+    {
+      "truth_mm": 150.0,
+      "measured_mm": 150.1,
+      "error_mm": 0.09999999999999432,
+      "confidence": 0.98,
+      "calibration": "aruco",
+      "gaps": 5,
+      "case": "head-on d16",
+      "latency_ms": 147.8860378265381
+    },
+    {
+      "truth_mm": 150.0,
+      "measured_mm": 151.7,
+      "error_mm": 1.6999999999999886,
+      "confidence": 0.98,
+      "calibration": "aruco",
+      "gaps": 5,
+      "case": "persp0.10 d16",
+      "latency_ms": 192.4910545349121
+    },
+    {
+      "truth_mm": 150.0,
+      "measured_mm": 133.2,
+      "error_mm": -16.80000000000001,
+      "confidence": 0.46,
+      "calibration": "aruco",
+      "gaps": 7,
+      "case": "persp0.18 d16",
+      "latency_ms": 259.854793548584
+    },
+    {
+      "truth_mm": 150.0,
+      "measured_mm": 150.0,
+      "error_mm": 0.0,
+      "confidence": 0.98,
+      "calibration": "aruco",
+      "gaps": 6,
+      "case": "head-on d25",
+      "latency_ms": 250.84257125854492
+    },
+    {
+      "truth_mm": 150.0,
+      "measured_mm": 152.0,
+      "error_mm": 2.0,
+      "confidence": 0.962,
+      "calibration": "aruco",
+      "gaps": 6,
+      "case": "persp0.10 d25",
+      "latency_ms": 231.1263084411621
+    },
+    {
+      "truth_mm": 150.0,
+      "measured_mm": 149.0,
+      "error_mm": -1.0,
+      "confidence": 0.925,
+      "calibration": "aruco",
+      "gaps": 5,
+      "case": "persp0.18 d25",
+      "latency_ms": 260.7235908508301
+    },
+    {
+      "truth_mm": 175.0,
+      "measured_mm": 175.1,
+      "error_mm": 0.09999999999999432,
+      "confidence": 0.98,
+      "calibration": "aruco",
+      "gaps": 5,
+      "case": "head-on d12",
+      "latency_ms": 322.0386505126953
+    },
+    {
+      "truth_mm": 175.0,
+      "measured_mm": 176.7,
+      "error_mm": 1.6999999999999886,
+      "confidence": 0.98,
+      "calibration": "aruco",
+      "gaps": 6,
+      "case": "persp0.10 d12",
+      "latency_ms": 332.02481269836426
+    },
+    {
+      "truth_mm": 175.0,
+      "measured_mm": 39.7,
+      "error_mm": -135.3,
+      "confidence": 0.407,
+      "calibration": "aruco",
+      "gaps": 9,
+      "case": "persp0.18 d12",
+      "latency_ms": 307.63816833496094
+    },
+    {
+      "truth_mm": 175.0,
+      "measured_mm": 175.1,
+      "error_mm": 0.09999999999999432,
+      "confidence": 0.98,
+      "calibration": "aruco",
+      "gaps": 6,
+      "case": "head-on d16",
+      "latency_ms": 279.1416645050049
+    },
+    {
+      "truth_mm": 175.0,
+      "measured_mm": 177.2,
+      "error_mm": 2.1999999999999886,
+      "confidence": 0.98,
+      "calibration": "aruco",
+      "gaps": 6,
+      "case": "persp0.10 d16",
+      "latency_ms": 291.61977767944336
+    },
+    {
+      "truth_mm": 175.0,
+      "measured_mm": 171.2,
+      "error_mm": -3.8000000000000114,
+      "confidence": 0.867,
+      "calibration": "aruco",
+      "gaps": 6,
+      "case": "persp0.18 d16",
+      "latency_ms": 270.4434394836426
+    },
+    {
+      "truth_mm": 175.0,
+      "measured_mm": null,
+      "case": "head-on d25",
+      "status": "uncalibrated"
+    },
+    {
+      "truth_mm": 175.0,
+      "measured_mm": 176.5,
+      "error_mm": 1.5,
+      "confidence": 0.98,
+      "calibration": "aruco",
+      "gaps": 5,
+      "case": "persp0.10 d25",
+      "latency_ms": 260.5762481689453
+    },
+    {
+      "truth_mm": 175.0,
+      "measured_mm": 175.9,
+      "error_mm": 0.9000000000000057,
+      "confidence": 0.98,
+      "calibration": "aruco",
+      "gaps": 6,
+      "case": "persp0.18 d25",
+      "latency_ms": 279.59227561950684
+    },
+    {
+      "truth_mm": 190.0,
+      "measured_mm": 190.1,
+      "error_mm": 0.09999999999999432,
+      "confidence": 0.98,
+      "calibration": "aruco",
+      "gaps": 6,
+      "case": "head-on d12",
+      "latency_ms": 347.0649719238281
+    },
+    {
+      "truth_mm": 190.0,
+      "measured_mm": 193.9,
+      "error_mm": 3.9000000000000057,
+      "confidence": 0.98,
+      "calibration": "aruco",
+      "gaps": 6,
+      "case": "persp0.10 d12",
+      "latency_ms": 342.49281883239746
+    },
+    {
+      "truth_mm": 190.0,
+      "measured_mm": 188.8,
+      "error_mm": -1.1999999999999886,
+      "confidence": 0.98,
+      "calibration": "aruco",
+      "gaps": 6,
+      "case": "persp0.18 d12",
+      "latency_ms": 333.8587284088135
+    },
+    {
+      "truth_mm": 190.0,
+      "measured_mm": 190.1,
+      "error_mm": 0.09999999999999432,
+      "confidence": 0.98,
+      "calibration": "aruco",
+      "gaps": 6,
+      "case": "head-on d16",
+      "latency_ms": 317.4939155578613
+    },
+    {
+      "truth_mm": 190.0,
+      "measured_mm": 193.9,
+      "error_mm": 3.9000000000000057,
+      "confidence": 0.98,
+      "calibration": "aruco",
+      "gaps": 6,
+      "case": "persp0.10 d16",
+      "latency_ms": 345.57652473449707
+    },
+    {
+      "truth_mm": 190.0,
+      "measured_mm": 184.0,
+      "error_mm": -6.0,
+      "confidence": 0.856,
+      "calibration": "aruco",
+      "gaps": 6,
+      "case": "persp0.18 d16",
+      "latency_ms": 324.1112232208252
+    },
+    {
+      "truth_mm": 190.0,
+      "measured_mm": 190.1,
+      "error_mm": 0.09999999999999432,
+      "confidence": 0.98,
+      "calibration": "aruco",
+      "gaps": 4,
+      "case": "head-on d25",
+      "latency_ms": 328.8414478302002
+    },
+    {
+      "truth_mm": 190.0,
+      "measured_mm": 194.8,
+      "error_mm": 4.800000000000011,
+      "confidence": 0.98,
+      "calibration": "aruco",
+      "gaps": 6,
+      "case": "persp0.10 d25",
+      "latency_ms": 316.81227684020996
+    },
+    {
+      "truth_mm": 190.0,
+      "measured_mm": 189.9,
+      "error_mm": -0.09999999999999432,
+      "confidence": 0.98,
+      "calibration": "aruco",
+      "gaps": 5,
+      "case": "persp0.18 d25",
+      "latency_ms": 331.38585090637207
+    },
+    {
+      "truth_mm": 200.0,
+      "measured_mm": 200.1,
+      "error_mm": 0.09999999999999432,
+      "confidence": 0.98,
+      "calibration": "aruco",
+      "gaps": 6,
+      "case": "head-on d12",
+      "latency_ms": 434.0505599975586
+    },
+    {
+      "truth_mm": 200.0,
+      "measured_mm": 203.6,
+      "error_mm": 3.5999999999999943,
+      "confidence": 0.98,
+      "calibration": "aruco",
+      "gaps": 5,
+      "case": "persp0.10 d12",
+      "latency_ms": 480.7002544403076
+    },
+    {
+      "truth_mm": 200.0,
+      "measured_mm": 149.9,
+      "error_mm": -50.099999999999994,
+      "confidence": 0.407,
+      "calibration": "aruco",
+      "gaps": 10,
+      "case": "persp0.18 d12",
+      "latency_ms": 462.3441696166992
+    },
+    {
+      "truth_mm": 200.0,
+      "measured_mm": 200.1,
+      "error_mm": 0.09999999999999432,
+      "confidence": 0.98,
+      "calibration": "aruco",
+      "gaps": 5,
+      "case": "head-on d16",
+      "latency_ms": 453.46927642822266
+    },
+    {
+      "truth_mm": 200.0,
+      "measured_mm": 204.3,
+      "error_mm": 4.300000000000011,
+      "confidence": 0.98,
+      "calibration": "aruco",
+      "gaps": 6,
+      "case": "persp0.10 d16",
+      "latency_ms": 416.9909954071045
+    },
+    {
+      "truth_mm": 200.0,
+      "measured_mm": 145.8,
+      "error_mm": -54.19999999999999,
+      "confidence": 0.407,
+      "calibration": "aruco",
+      "gaps": 10,
+      "case": "persp0.18 d16",
+      "latency_ms": 461.895227432251
+    },
+    {
+      "truth_mm": 200.0,
+      "measured_mm": 200.1,
+      "error_mm": 0.09999999999999432,
+      "confidence": 0.98,
+      "calibration": "aruco",
+      "gaps": 5,
+      "case": "head-on d25",
+      "latency_ms": 370.6352710723877
+    },
+    {
+      "truth_mm": 200.0,
+      "measured_mm": 202.8,
+      "error_mm": 2.8000000000000114,
+      "confidence": 0.98,
+      "calibration": "aruco",
+      "gaps": 5,
+      "case": "persp0.10 d25",
+      "latency_ms": 421.1432933807373
+    },
+    {
+      "truth_mm": 200.0,
+      "measured_mm": 198.0,
+      "error_mm": -2.0,
+      "confidence": 0.582,
+      "calibration": "aruco",
+      "gaps": 6,
+      "case": "persp0.18 d25",
+      "latency_ms": 418.40600967407227
+    },
+    {
+      "truth_mm": 250.0,
+      "measured_mm": 250.1,
+      "error_mm": 0.09999999999999432,
+      "confidence": 0.98,
+      "calibration": "aruco",
+      "gaps": 6,
+      "case": "head-on d12",
+      "latency_ms": 607.9180240631104
+    },
+    {
+      "truth_mm": 250.0,
+      "measured_mm": 250.0,
+      "error_mm": 0.0,
+      "confidence": 0.98,
+      "calibration": "aruco",
+      "gaps": 6,
+      "case": "persp0.10 d12",
+      "latency_ms": 641.505241394043
+    },
+    {
+      "truth_mm": 250.0,
+      "measured_mm": 250.8,
+      "error_mm": 0.8000000000000114,
+      "confidence": 0.98,
+      "calibration": "aruco",
+      "gaps": 4,
+      "case": "persp0.18 d12",
+      "latency_ms": 595.867395401001
+    },
+    {
+      "truth_mm": 250.0,
+      "measured_mm": 250.1,
+      "error_mm": 0.09999999999999432,
+      "confidence": 0.98,
+      "calibration": "aruco",
+      "gaps": 4,
+      "case": "head-on d16",
+      "latency_ms": 503.8163661956787
+    },
+    {
+      "truth_mm": 250.0,
+      "measured_mm": 250.0,
+      "error_mm": 0.0,
+      "confidence": 0.98,
+      "calibration": "aruco",
+      "gaps": 6,
+      "case": "persp0.10 d16",
+      "latency_ms": 707.9191207885742
+    },
+    {
+      "truth_mm": 250.0,
+      "measured_mm": 218.5,
+      "error_mm": -31.5,
+      "confidence": 0.407,
+      "calibration": "aruco",
+      "gaps": 9,
+      "case": "persp0.18 d16",
+      "latency_ms": 600.3463268280029
+    },
+    {
+      "truth_mm": 250.0,
+      "measured_mm": 250.1,
+      "error_mm": 0.09999999999999432,
+      "confidence": 0.98,
+      "calibration": "aruco",
+      "gaps": 6,
+      "case": "head-on d25",
+      "latency_ms": 551.785945892334
+    },
+    {
+      "truth_mm": 250.0,
+      "measured_mm": 250.1,
+      "error_mm": 0.09999999999999432,
+      "confidence": 0.98,
+      "calibration": "aruco",
+      "gaps": 6,
+      "case": "persp0.10 d25",
+      "latency_ms": 580.4352760314941
+    },
+    {
+      "truth_mm": 250.0,
+      "measured_mm": 229.3,
+      "error_mm": -20.69999999999999,
+      "confidence": 0.407,
+      "calibration": "aruco",
+      "gaps": 7,
+      "case": "persp0.18 d25",
+      "latency_ms": 572.4220275878906
+    },
+    {
+      "truth_mm": 300.0,
+      "measured_mm": 300.2,
+      "error_mm": 0.19999999999998863,
+      "confidence": 0.98,
+      "calibration": "aruco",
+      "gaps": 6,
+      "case": "head-on d12",
+      "latency_ms": 816.8900012969971
+    },
+    {
+      "truth_mm": 300.0,
+      "measured_mm": 297.5,
+      "error_mm": -2.5,
+      "confidence": 0.98,
+      "calibration": "aruco",
+      "gaps": 6,
+      "case": "persp0.10 d12",
+      "latency_ms": 923.4492778778076
+    },
+    {
+      "truth_mm": 300.0,
+      "measured_mm": 298.8,
+      "error_mm": -1.1999999999999886,
+      "confidence": 0.98,
+      "calibration": "aruco",
+      "gaps": 5,
+      "case": "persp0.18 d12",
+      "latency_ms": 754.3797492980957
+    },
+    {
+      "truth_mm": 300.0,
+      "measured_mm": 300.2,
+      "error_mm": 0.19999999999998863,
+      "confidence": 0.98,
+      "calibration": "aruco",
+      "gaps": 6,
+      "case": "head-on d16",
+      "latency_ms": 689.5496845245361
+    },
+    {
+      "truth_mm": 300.0,
+      "measured_mm": 297.3,
+      "error_mm": -2.6999999999999886,
+      "confidence": 0.98,
+      "calibration": "aruco",
+      "gaps": 5,
+      "case": "persp0.10 d16",
+      "latency_ms": 890.2101516723633
+    },
+    {
+      "truth_mm": 300.0,
+      "measured_mm": 277.1,
+      "error_mm": -22.899999999999977,
+      "confidence": 0.407,
+      "calibration": "aruco",
+      "gaps": 7,
+      "case": "persp0.18 d16",
+      "latency_ms": 773.6704349517822
+    },
+    {
+      "truth_mm": 300.0,
+      "measured_mm": 300.2,
+      "error_mm": 0.19999999999998863,
+      "confidence": 0.98,
+      "calibration": "aruco",
+      "gaps": 5,
+      "case": "head-on d25",
+      "latency_ms": 783.3652496337891
+    },
+    {
+      "truth_mm": 300.0,
+      "measured_mm": 298.2,
+      "error_mm": -1.8000000000000114,
+      "confidence": 0.98,
+      "calibration": "aruco",
+      "gaps": 6,
+      "case": "persp0.10 d25",
+      "latency_ms": 842.0920372009277
+    },
+    {
+      "truth_mm": 300.0,
+      "measured_mm": 297.2,
+      "error_mm": -2.8000000000000114,
+      "confidence": 0.98,
+      "calibration": "aruco",
+      "gaps": 6,
+      "case": "persp0.18 d25",
+      "latency_ms": 864.8130893707275
+    }
+  ]
+}

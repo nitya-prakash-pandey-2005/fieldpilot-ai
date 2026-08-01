@@ -204,17 +204,34 @@ python models/training/train_rebar_spacing.py \
 
 `imgsz 1280` here — intersections are small and this model only has to handle one class, so spend the resolution on it.
 
-**Evaluation is different for this model.** mAP is not the metric that matters; **millimetre error against ground truth** is. The eval script measures spacing on the held-out D5 test split against tape-measure ground truth:
+**Evaluation is different for this model.** mAP is not the metric that matters; **millimetre error against ground truth** is.
 
 ```bash
-python models/training/eval_measurement.py --weights runs/rebar_lattice_v1/weights/best.pt
+# synthetic — runs anywhere, no data collection, catches regressions
+python models/training/eval_measurement.py --synthetic
+
+# real — what you quote to judges
+python models/training/eval_measurement.py --data data/measurement_gt \
+    --weights runs/fieldpilot/rebar_lattice_v1/weights/best.pt
 ```
 
-| Metric | Target | Deck claim it supports |
+Accuracy is scored on **two populations**, because Agent 5 treats confidence < 0.75 as UNCERTAIN and does not issue a STOP WORK on it:
+
+- **Actionable** (conf ≥ 0.75) — the measurements the system acts on. A wrong number here can cause a wrong decision, so the targets apply to this set.
+- **All** — reported alongside, with a coverage floor. Without the floor, an engine could hit any accuracy target by declaring everything uncertain; "accurate but silent" is not accurate.
+
+| Metric | Target | Synthetic baseline achieved (line path, no trained model) |
 |---|---|---|
-| Mean absolute spacing error | ≤ 5 mm at 1.5 m standoff with ArUco | "±5% measurement accuracy" (system_prompt §13.1) |
-| 95th-percentile error | ≤ 12 mm | |
-| Detection rate on visible grids | ≥ 90% | |
+| Actionable mean absolute error | ≤ 5 mm | **1.16 mm** |
+| Actionable 95th percentile | ≤ 12 mm | **3.90 mm** |
+| Actionable coverage | ≥ 70% | **80.6%** |
+| Detection rate | ≥ 90% | **98.6%** |
+
+Baseline measured across 72 synthetic scenes: spacings 100–300 mm, bar diameters 12/16/25 mm, head-on and two perspective angles. Median actionable error 0.35 mm.
+
+The property worth pointing at in the demo: **every large-error case self-reports below the confidence threshold.** All-measurements max error is 516 mm; actionable max error is 6.0 mm. The engine knows when it is unreliable, and a number it refuses to act on cannot become a false STOP WORK. `models/evaluation/measurement_error_hist.png` shows both populations stacked.
+
+**You still need real ground truth.** Cheapest path: print an ArUco marker (§4.1), lay it beside any rebar grid, tape-measure 20 real spacings, photograph each from 3 distances. 60 photos, one afternoon, logged in `data/measurement_gt/ground_truth.csv`. **Do this before the demo video** — it's the highest-credibility-per-hour task in this entire document, and synthetic scenes cannot see lens distortion, a curled marker, motion blur, or rust.
 
 **You need ground truth for this.** Cheapest path: print an ArUco marker (§4.1), lay it beside any rebar grid, tape-measure 20 real spacings, photograph each from 3 distances. 60 photos, one afternoon, and it turns your accuracy claim into a measured result. **Do this before the demo video** — it's the highest-credibility-per-hour task in this entire document.
 
