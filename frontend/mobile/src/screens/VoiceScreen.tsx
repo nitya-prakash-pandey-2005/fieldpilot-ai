@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, ScrollView } from 'react-native';
 import { Mic, Square, Volume2, ArrowLeft } from 'lucide-react-native';
 import { Audio } from 'expo-av';
-import * as FileSystem from 'expo-file-system/legacy';
 import config from '../config';
 import { useTheme } from '../context/ThemeContext';
 
@@ -63,24 +62,35 @@ export function VoiceScreen() {
 
   const sendToBackend = async (uri: string) => {
     try {
-      const base64Audio = await FileSystem.readAsStringAsync(uri, {
-        encoding: 'base64',
-      });
-
       const apiUrl = apiBaseUrl || config.API_BASE_URL;
-      const response = await fetch(`${apiUrl}/api/v1/voice/query_json`, {
+
+      // Upload the recording as multipart rather than reading it into a base64
+      // string first. React Native's FormData takes a file:// URI directly and
+      // streams it natively, so this needs no filesystem library — the previous
+      // implementation imported `expo-file-system/legacy`, which is not in
+      // package.json and is not installed, so this screen could not bundle at
+      // all. It also avoids base64's ~33% size inflation over site WiFi.
+      const form = new FormData();
+      const name = uri.split('/').pop() || 'recording.m4a';
+      const ext = (name.split('.').pop() || 'm4a').toLowerCase();
+      form.append('audio', {
+        uri,
+        name,
+        type: ext === 'wav' ? 'audio/wav' : `audio/${ext}`,
+      } as any);
+      form.append('project_id', 'P-001');
+      form.append('zone_id', 'A12');
+      form.append('worker_id', 'W-001');
+
+      const response = await fetch(`${apiUrl}/api/v1/voice/query`, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
+          // Content-Type is deliberately omitted: fetch must set it itself so
+          // it can append the multipart boundary.
           'Bypass-Tunnel-Reminder': 'true',
           'X-Gemini-API-Key': geminiApiKey || '',
         },
-        body: JSON.stringify({
-          audio_base64: base64Audio,
-          project_id: 'P-001',
-          zone_id: 'A12',
-          worker_id: 'W-001'
-        })
+        body: form,
       });
 
       const text = await response.text();
@@ -88,27 +98,32 @@ export function VoiceScreen() {
       try {
         data = JSON.parse(text);
       } catch (e) {
-        throw new Error(text.substring(0, 50) || 'Invalid server response');
+        throw new Error(text.substring(0, 80) || 'Invalid server response');
       }
-      
+
       if (!response.ok) {
         throw new Error(data.detail || `Server error: ${response.status}`);
       }
-      
-      setTranscript(data.transcript || 'Unknown query');
+
+      setTranscript(data.transcript || '');
       setResponseText(data.response_text || data.answer || 'No response from AI');
       setEvidence(data.evidence || []);
-      
       setState('RESPONDING');
-      
-      // Play audio
+
       if (data.audio_base64) {
         playBase64Audio(data.audio_base64);
       }
-      
-    } catch (error) {
-      console.error("Error sending voice query:", error);
-      setState('IDLE');
+    } catch (error: any) {
+      // Surface the failure instead of silently dropping back to IDLE, which
+      // looked identical to "the app didn't hear you".
+      console.error('Error sending voice query:', error);
+      setTranscript('');
+      setResponseText(
+        `Couldn't reach the assistant: ${error?.message ?? 'unknown error'}. ` +
+        `Check the API URL in Profile (currently ${apiBaseUrl || config.API_BASE_URL}).`
+      );
+      setEvidence([]);
+      setState('RESPONDING');
     }
   };
 

@@ -8,6 +8,7 @@ import numpy as np
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../../")))
 from agents.vision.detector import VisionPipeline
 from agents.vision.vlm_analyzer import VLMAnalyzer
+from routes.interactions import record_interaction
 # from agents.learning.learning_agent import LearningAgent
 # from agents.notification.notification_agent import NotificationAgent
 from fastapi import Body
@@ -90,13 +91,17 @@ async def understand_scene(
     zone_id: str = Body("A12"),
     language: str = Body("en"),
     worker_query: str = Body(None),
-    project_id: str = Body("P-001")
+    project_id: str = Body("P-001"),
+    worker_id: str = Body(None),
 ):
     """
     Main endpoint for glasses stream.
     Combines YOLO detection + VLM understanding.
     Returns spoken response for worker.
     """
+    import time as _time
+    _t0 = _time.time()
+
     # 1. VLM Scene Understanding
     vlm_result = await vlm_analyzer.analyze_scene(
         image_base64=image,
@@ -150,6 +155,31 @@ async def understand_scene(
             pass
         except Exception as e:
             print(f"Error sending notification: {e}")
+
+    # 5. Append to the worker's interaction history / audit trail. Best-effort:
+    # record_interaction never raises, so a history failure cannot turn a
+    # successful scan into a failed request.
+    hazards = vlm_result.get("safety_hazards") or []
+    issues = vlm_result.get("compliance_issues") or []
+    await record_interaction(
+        kind="voice" if worker_query else "scan",
+        worker_id=worker_id,
+        zone_code=zone_id,
+        project_id=project_id,
+        query=worker_query or (vlm_result.get("work_type") or "Scene scan"),
+        result=(vlm_result.get("spoken_response")
+                or vlm_result.get("scene_description") or "")[:4000],
+        # Only a compliance check produces a PASS/FAIL. A scene description is
+        # informational, and labelling it PASS would imply an inspection that
+        # never happened.
+        verdict=("FAIL" if (urgency in ("high", "critical") or issues)
+                 else "INFO"),
+        severity=urgency.upper() if urgency else None,
+        confidence=(vlm_result.get("confidence")
+                    if isinstance(vlm_result.get("confidence"), (int, float)) else None),
+        agent_chain="A1:Vision -> VLM" + (" -> A9:Notify" if hazards or issues else ""),
+        latency_ms=round((_time.time() - _t0) * 1000, 1),
+    )
 
     # Return unified payload
     return _json_safe({

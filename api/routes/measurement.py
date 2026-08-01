@@ -187,6 +187,7 @@ class MeasureAndValidateRequest(BaseModel):
     tolerance_max: float
     standard_ref: str = "ACI 318-19 §7.7.1"
     device: str = "webcam"
+    worker_id: Optional[str] = None
 
 
 @router.post("/validate")
@@ -196,16 +197,30 @@ async def measure_and_validate(req: MeasureAndValidateRequest):
     This is the demo path: one call gives the measured value, the PASS/FAIL
     verdict, the severity, and the exact wording to speak into the worker's ear.
     """
+    import time as _time
+
     from agents.compliance.validator import (
         ComplianceEngine, Measurement, Specification, ValidationRequest,
     )
+    from routes.interactions import record_interaction
 
+    _t0 = _time.time()
     image = _decode_b64(req.frame)
     measured = engine.measure(image, measurement_type=req.parameter,
                               device=req.device, want_annotated=True)
 
     if measured.get("status") != "success" or not measured.get("measurements"):
         # Surface the refusal verbatim rather than coercing it into a verdict.
+        # It is still recorded: "the system could not measure this" is exactly
+        # the kind of event an audit trail needs to show.
+        await record_interaction(
+            kind="measurement", worker_id=req.worker_id, zone_code=req.zone_id,
+            query=f"Measure {req.parameter} (spec {req.expected_value}mm "
+                  f"{req.tolerance_min}-{req.tolerance_max})",
+            result=measured.get("message") or measured.get("status"),
+            verdict="UNCERTAIN", agent_chain="A2:Measurement",
+            latency_ms=round((_time.time() - _t0) * 1000, 1),
+        )
         return {
             "measurement": measured,
             "validation": None,
@@ -234,8 +249,25 @@ async def measure_and_validate(req: MeasureAndValidateRequest):
         ),
     ))
 
-    return {"measurement": measured, "validation": validation,
-            "verdict": (validation or {}).get("result")}
+    verdict = (validation or {}).get("result")
+    explanation = (validation or {}).get("explanation") or {}
+    await record_interaction(
+        kind="measurement",
+        worker_id=req.worker_id,
+        zone_code=req.zone_id,
+        query=f"Measure {req.parameter} (spec {req.expected_value}mm, "
+              f"tolerance {req.tolerance_min}-{req.tolerance_max}mm)",
+        result=explanation.get("worker_message")
+               or f"{m['value']}{m.get('unit', 'mm')} measured",
+        verdict=verdict,
+        severity=(validation or {}).get("severity"),
+        confidence=m.get("confidence"),
+        agent_chain="A2:Measurement -> A5:Compliance"
+                    + (" -> A9:Notify" if verdict == "FAIL" else ""),
+        latency_ms=round((_time.time() - _t0) * 1000, 1),
+    )
+
+    return {"measurement": measured, "validation": validation, "verdict": verdict}
 
 
 # ---------------------------------------------------------------------------
