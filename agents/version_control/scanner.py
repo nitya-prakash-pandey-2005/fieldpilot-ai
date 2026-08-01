@@ -17,6 +17,11 @@ except ImportError:
 
 from neo4j import GraphDatabase
 
+import sys
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../../")))
+# Fail-fast Neo4j timeouts — see utils/neo4j_config.py
+from utils.neo4j_config import DRIVER_KWARGS as _NEO4J_KW
+
 logger = logging.getLogger(__name__)
 
 DRAWING_NUMBER_PATTERNS = [
@@ -109,7 +114,7 @@ class VersionControlScanner:
 
         self.ocr = VersionControlScanner._ocr
 
-        self.uri = os.getenv("NEO4J_URI", "bolt://localhost:7687")
+        self.uri = os.getenv("NEO4J_URI", "bolt://127.0.0.1:7687")
         self.user = os.getenv("NEO4J_USER", "neo4j")
         # Matches docker-compose.yml's real NEO4J_AUTH — "password" never
         # matched the actual container (same stale-default bug fixed
@@ -158,7 +163,7 @@ class VersionControlScanner:
 
     def lookup_neo4j(self, drawing_number: str) -> dict | None:
         try:
-            driver = GraphDatabase.driver(self.uri, auth=(self.user, self.password))
+            driver = GraphDatabase.driver(self.uri, auth=(self.user, self.password), **_NEO4J_KW)
             with driver.session() as session:
                 query = """
                 MATCH (d:Drawing {number: $drawing_number})

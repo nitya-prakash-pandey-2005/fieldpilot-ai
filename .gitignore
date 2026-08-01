@@ -56,3 +56,16 @@ clean_tree.txt
 # Runtime state (regenerated locally, not fixture data)
 data/offline_queue.db
 *.log
+
+# Local databases. api/fieldpilot.db is the SQLite fallback store — it is
+# recreated on startup (api/main.py seeds zones, issues and demo users), and it
+# accumulates real bcrypt password hashes and whatever issue data a demo run
+# produces. Runtime state, not fixture data, and not something to publish.
+api/fieldpilot.db
+*.sqlite
+*.sqlite3
+
+# Trained weights and datasets are large and regenerable — see
+# docs/TRAINING_PLAN.md for how to rebuild them.
+data/training/
+runs/

@@ -17,7 +17,7 @@ from agents.drawing.indexer import EMBEDDING_MODEL, EMBEDDING_DIM, collection_na
 # against a single global "drawings_vectors" — two RAG paths that never saw
 # each other's data despite sharing a Qdrant instance).
 embedder = SentenceTransformer(EMBEDDING_MODEL)
-client = QdrantClient(url=os.getenv("QDRANT_URL", "http://localhost:6333"))
+client = QdrantClient(url=os.getenv("QDRANT_URL", "http://localhost:6333"), timeout=float(os.getenv("QDRANT_TIMEOUT", "2.0")))
 
 class RetrievalResult(BaseModel):
     text: str

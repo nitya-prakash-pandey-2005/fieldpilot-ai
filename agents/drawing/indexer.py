@@ -22,7 +22,7 @@ class DocumentIndexer:
     def __init__(self):
         # We initialize the model lazily
         self.model = None
-        self.qdrant_client = QdrantClient(url=QDRANT_URL)
+        self.qdrant_client = QdrantClient(url=QDRANT_URL, timeout=float(os.getenv("QDRANT_TIMEOUT", "2.0")))
 
     def _get_model(self):
         if self.model is None:

@@ -9,6 +9,8 @@ from pydantic import BaseModel
 from neo4j import AsyncGraphDatabase
 
 from agents.learning.retry_queue import queue_failed_write
+# Fail-fast Neo4j timeouts — see utils/neo4j_config.py
+from utils.neo4j_config import DRIVER_KWARGS as _NEO4J_KW
 
 logger = logging.getLogger(__name__)
 
@@ -41,7 +43,7 @@ class IngestResult:
 
 class LearningIngestor:
     def __init__(self):
-        self.neo4j_uri = os.getenv("NEO4J_URI", "bolt://localhost:7687")
+        self.neo4j_uri = os.getenv("NEO4J_URI", "bolt://127.0.0.1:7687")
         self.neo4j_user = os.getenv("NEO4J_USER", "neo4j")
         # Matches the real credential in docker-compose.yml's NEO4J_AUTH and
         # api/db.py's hardcoded NEO4J_AUTH — this previously defaulted to
@@ -137,7 +139,7 @@ class LearningIngestor:
 
     async def _write_neo4j(self, payload: IncidentResolutionPayload):
         # We attempt a real connection. If Neo4j isn't running, it raises an exception which is caught by ingest()
-        driver = AsyncGraphDatabase.driver(self.neo4j_uri, auth=(self.neo4j_user, self.neo4j_password))
+        driver = AsyncGraphDatabase.driver(self.neo4j_uri, auth=(self.neo4j_user, self.neo4j_password), **_NEO4J_KW)
         
         engineer_id = payload.resolution.get("resolved_by", "Unknown")
         cypher = """
@@ -181,7 +183,7 @@ class LearningIngestor:
 
         def _embed_and_upsert():
             model = _get_incident_embedder()
-            client = QdrantClient(url=os.getenv("QDRANT_URL", "http://localhost:6333"))
+            client = QdrantClient(url=os.getenv("QDRANT_URL", "http://localhost:6333"), timeout=float(os.getenv("QDRANT_TIMEOUT", "2.0")))
             try:
                 collections = client.get_collections().collections
                 if not any(c.name == QDRANT_COLLECTION for c in collections):

@@ -230,48 +230,134 @@ async def get_full_graph(project_id: str = "default-project", db: AsyncSession =
 
 @router.get("/zone/{zone_id}/status")
 async def get_zone_status(zone_id: str):
+    """Zone risk from the knowledge graph, falling back to Postgres.
+
+    Neo4j being unavailable is a degraded state, not a failed request — the
+    same zone risk exists in the relational store, so serve that and label the
+    source rather than 500ing on a dashboard panel mid-demo.
+    """
     session = get_neo4j_session()
-    if not session:
-        raise HTTPException(status_code=500, detail="Neo4j connection not available")
-    
-    try:
-        risk_data = get_zone_risk_score(session, zone_id)
-        return {"status": "success", "data": risk_data}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-    finally:
-        session.close()
+    if session:
+        try:
+            return {"status": "success", "source": "neo4j",
+                    "data": get_zone_risk_score(session, zone_id)}
+        except Exception as e:
+            print(f"[GRAPH] zone status via Neo4j failed ({e}); using Postgres")
+        finally:
+            try:
+                session.close()
+            except Exception:
+                pass
+
+    fallback = await _zone_risk_from_postgres(zone_id)
+    if fallback is None:
+        raise HTTPException(status_code=404, detail=f"Zone {zone_id} not found")
+    return {"status": "degraded", "source": "postgres",
+            "detail": "knowledge graph unavailable — risk computed from relational store",
+            "data": fallback}
+
 
 @router.get("/project/{project_id}/zones")
 async def get_project_zones(project_id: str):
+    """All zones with risk, from the graph where possible.
+
+    The previous fallback here returned three hardcoded zones with invented
+    risk scores whenever Neo4j was down. That is worse than an error: the
+    dashboard renders it identically to live data, so a demo could show
+    confident numbers for a project that has none. Postgres holds the real
+    zone rows, so degrade to those and say which store answered.
+    """
     session = get_neo4j_session()
-    if not session:
-        return {"status": "success", "data": [
-            {"zone_id": "z-1", "name": "Zone A12", "risk_score": 85, "status": "critical", "active_issues": 2, "coordinates": {"x": 100, "y": 100}},
-            {"zone_id": "z-2", "name": "Zone B3", "risk_score": 45, "status": "amber", "active_issues": 2, "coordinates": {"x": 200, "y": 150}},
-            {"zone_id": "z-3", "name": "Zone C7", "risk_score": 12, "status": "green", "active_issues": 1, "coordinates": {"x": 300, "y": 200}}
-        ]}
-    
+    if session:
+        try:
+            with session.begin_transaction() as tx:
+                result = tx.run("MATCH (z:Zone) RETURN z.id AS id, z.x AS x, z.y AS y")
+                zones_info = [{"id": r["id"], "x": r["x"], "y": r["y"]} for r in result]
+
+            if zones_info:
+                data = []
+                for z in zones_info:
+                    risk_data = get_zone_risk_score(session, z["id"])
+                    risk_score = risk_data.get("risk_score") or 0.0
+                    data.append({
+                        "zone_id": z["id"],
+                        "name": f"Zone {z['id']}",
+                        "risk_score": risk_score,
+                        "status": "critical" if risk_score > 0.7 else (
+                            "amber" if risk_score > 0.3 else "green"),
+                        "active_issues": risk_data.get("failures") or 0,
+                        "coordinates": {"x": z["x"] or 0, "y": z["y"] or 0},
+                    })
+                return {"status": "success", "source": "neo4j", "data": data}
+        except Exception as e:
+            print(f"[GRAPH] project zones via Neo4j failed ({e}); using Postgres")
+        finally:
+            try:
+                session.close()
+            except Exception:
+                pass
+
+    return {"status": "degraded", "source": "postgres",
+            "detail": "knowledge graph unavailable or empty — zones from relational store",
+            "data": await _zones_from_postgres(project_id)}
+
+
+# ---------------------------------------------------------------------------
+# Postgres degradation path — real rows, never invented ones
+# ---------------------------------------------------------------------------
+
+async def _zones_from_postgres(project_id: str) -> list[dict]:
+    from db import async_session
     try:
-        with session.begin_transaction() as tx:
-            result = tx.run("MATCH (z:Zone) RETURN z.id AS id, z.x AS x, z.y AS y")
-            zones_info = [{"id": r["id"], "x": r["x"], "y": r["y"]} for r in result]
-            
-        data = []
-        for z in zones_info:
-            risk_data = get_zone_risk_score(session, z["id"])
-            risk_score = risk_data.get("risk_score") or 0.0
-            data.append({
-                "zone_id": z["id"], 
-                "name": f"Zone {z['id']}",
-                "risk_score": risk_score,
-                "status": "critical" if risk_score > 0.7 else ("amber" if risk_score > 0.3 else "green"),
-                "active_issues": risk_data.get("failures") or 0,
-                "coordinates": {"x": z["x"] or 0, "y": z["y"] or 0}
-            })
-            
-        return {"status": "success", "data": data}
+        async with async_session() as s:
+            zones = (await s.execute(
+                select(Zone).where(Zone.project_id == project_id))).scalars().all()
+            out = []
+            for i, z in enumerate(zones):
+                # Zone.risk_score is stored 0-100; the graph path emits a 0-1
+                # failure ratio. Normalise so the dashboard's thresholds mean
+                # the same thing whichever store answered.
+                score = float(z.risk_score or 0) / 100.0
+                out.append({
+                    "zone_id": z.zone_code or z.id,
+                    "name": z.name or f"Zone {z.zone_code}",
+                    "risk_score": round(score, 3),
+                    "status": "critical" if score > 0.7 else ("amber" if score > 0.3 else "green"),
+                    "active_issues": int(z.open_issue_count or 0),
+                    # No survey coordinates in the relational store; lay zones
+                    # out on a row so the map still renders, and flag that the
+                    # positions are placeholders rather than surveyed points.
+                    "coordinates": {"x": 100 + i * 100, "y": 100 + (i % 3) * 50},
+                    "coordinates_are_placeholder": True,
+                })
+            return out
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-    finally:
-        session.close()
+        print(f"[GRAPH] Postgres zone fallback failed: {e}")
+        return []
+
+
+async def _zone_risk_from_postgres(zone_id: str) -> dict | None:
+    from db import async_session
+    try:
+        async with async_session() as s:
+            z = (await s.execute(
+                select(Zone).where(Zone.zone_code == zone_id))).scalars().first()
+            if z is None:
+                z = (await s.execute(
+                    select(Zone).where(Zone.id == zone_id))).scalars().first()
+            if z is None:
+                return None
+
+            issues = (await s.execute(
+                select(FieldIssue).where(FieldIssue.zone_code == z.zone_code))).scalars().all()
+            failures = sum(1 for i in issues
+                           if (i.severity or "").lower() in ("critical", "high"))
+            return {
+                "zone_id": z.zone_code,
+                "risk_score": round(float(z.risk_score or 0) / 100.0, 3),
+                "failures": failures,
+                "total": len(issues),
+            }
+    except Exception as e:
+        print(f"[GRAPH] Postgres zone-risk fallback failed: {e}")
+        return None

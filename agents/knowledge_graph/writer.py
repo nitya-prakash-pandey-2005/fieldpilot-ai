@@ -1,11 +1,23 @@
 import os
+import sys
 import uuid
 import json
 import hashlib
 from datetime import datetime, timezone
 from neo4j import AsyncGraphDatabase
 
-neo4j_uri = os.getenv("NEO4J_URI", "bolt://localhost:7687")
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../../")))
+# Fail-fast timeouts: write_inspection() below runs on every compliance verdict,
+# so the driver's default ~4s retry on an unreachable Neo4j lands straight in
+# the worker's spoken-alert latency. See utils/neo4j_config.py.
+from utils.neo4j_config import DRIVER_KWARGS as _NEO4J_KW
+from utils.neo4j_config import breaker as _neo4j_breaker
+from utils.neo4j_config import uri as _neo4j_uri
+
+# 127.0.0.1 by default, not localhost: localhost resolves to both ::1 and
+# 127.0.0.1 and the driver tries each in turn, doubling the timeout cost when
+# Neo4j is down. See utils/neo4j_config.py.
+neo4j_uri = _neo4j_uri()
 neo4j_user = os.getenv("NEO4J_USER", "neo4j")
 neo4j_password = os.getenv("NEO4J_PASSWORD", "askthewall_dev")
 
@@ -65,8 +77,17 @@ async def write_inspection(
     ComplianceEngine.validate().
     """
     asset_type = infer_asset_type(asset_id, asset_type_hint)
+
+    # This runs on EVERY compliance verdict. With Neo4j down, the connection
+    # attempt alone was measured at ~4s per call, landing directly in the
+    # worker's spoken-alert latency. Once the breaker is open we skip it
+    # entirely and the verdict goes out immediately; the graph write is
+    # best-effort by design (see the docstring's "log and continue" contract).
+    if not _neo4j_breaker.should_attempt():
+        return False
+
     try:
-        driver = AsyncGraphDatabase.driver(neo4j_uri, auth=(neo4j_user, neo4j_password))
+        driver = AsyncGraphDatabase.driver(neo4j_uri, auth=(neo4j_user, neo4j_password), **_NEO4J_KW)
         cypher = """
         MERGE (z:Zone {id: $zone_id})
         MERGE (a:Asset {id: $asset_id})
@@ -87,8 +108,10 @@ async def write_inspection(
                 inspector_id=inspector_id,
             )
         await driver.close()
+        _neo4j_breaker.record_success()
         return True
     except Exception as e:
+        _neo4j_breaker.record_failure()
         print(f"[KnowledgeGraph] Failed to write Inspection node: {e}")
         return False
 
@@ -113,7 +136,7 @@ async def commit_asset_version(asset_id: str, changes: dict, author: str) -> dic
     ).hexdigest()[:12]
 
     try:
-        driver = AsyncGraphDatabase.driver(neo4j_uri, auth=(neo4j_user, neo4j_password))
+        driver = AsyncGraphDatabase.driver(neo4j_uri, auth=(neo4j_user, neo4j_password), **_NEO4J_KW)
         cypher = """
         MERGE (a:Asset {id: $asset_id})
         CREATE (v:AssetVersion {
@@ -144,7 +167,7 @@ async def get_asset_version_history(asset_id: str) -> list:
     hardcoded 2-entry history GET /api/v1/version-control/history/{asset_id}
     previously returned for every asset_id regardless of input."""
     try:
-        driver = AsyncGraphDatabase.driver(neo4j_uri, auth=(neo4j_user, neo4j_password))
+        driver = AsyncGraphDatabase.driver(neo4j_uri, auth=(neo4j_user, neo4j_password), **_NEO4J_KW)
         cypher = """
         MATCH (a:Asset {id: $asset_id})-[:HAS_VERSION]->(v:AssetVersion)
         RETURN v.id AS version_id, v.commit_hash AS commit_hash, v.author AS author,

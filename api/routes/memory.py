@@ -48,15 +48,36 @@ async def query_memory(req: MemoryRequest, request: Request):
     """
     RAG over past RFIs, project specs, and previous issues to provide historical context.
     """
+    api_key = request.headers.get("X-Gemini-API-Key")
+    if api_key:
+        req.api_key = api_key
+
     try:
-        api_key = request.headers.get("X-Gemini-API-Key")
-        if api_key:
-            req.api_key = api_key
-        # Await the async answer_query method
-        result = await retriever.answer_query(req)
-        return result
+        return await retriever.answer_query(req)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        # Qdrant or the LLM being unreachable is an infrastructure outage, not a
+        # malformed request. Returning 500 here blanks the dashboard's Ask-AI
+        # panel with a red error; returning a structured "I can't answer and
+        # here's why" keeps the UI coherent and tells the worker what to do.
+        #
+        # It must NOT invent an answer: a fabricated citation from the project
+        # memory agent is the single most damaging thing this system could
+        # output, because the whole value proposition is that its answers are
+        # backed by a real approval or spec.
+        msg = str(e)
+        unreachable = any(s in msg.lower() for s in
+                          ("refused", "connection", "timed out", "10061", "unreachable"))
+        print(f"[MEMORY] query failed: {msg}")
+        return {
+            "status": "degraded",
+            "answer": None,
+            "confidence": 0.0,
+            "evidence": [],
+            "error": ("Project memory store is unreachable, so no cited answer can be "
+                      "given. Start it with `docker compose up -d qdrant`."
+                      if unreachable else f"Memory query failed: {msg}"),
+            "error_class": "store_unreachable" if unreachable else "query_failed",
+        }
 
 class IndexMemoryRequest(BaseModel):
     document_content: str

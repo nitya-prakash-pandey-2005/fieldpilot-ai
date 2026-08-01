@@ -24,8 +24,23 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 # multi-service deployment would want RS256 with a shared public key
 # instead — flagged here for whoever picks this up for real multi-tenant
 # production use.
-JWT_SECRET = os.getenv("JWT_SECRET", "dev-only-insecure-secret-change-in-production")
+_DEV_SECRET = "dev-only-insecure-secret-change-in-production"
+JWT_SECRET = os.getenv("JWT_SECRET", _DEV_SECRET)
 JWT_ALGORITHM = "HS256"
+
+# A known default signing key means anyone can mint an admin token. That is
+# tolerable on a laptop and not tolerable anywhere reachable, so refuse to boot
+# rather than come up quietly insecure — a silent fallback is exactly the kind
+# of thing that survives all the way to a public demo URL.
+if JWT_SECRET == _DEV_SECRET:
+    if os.getenv("FIELDPILOT_ENV", "development").lower() in ("production", "prod", "staging"):
+        raise RuntimeError(
+            "JWT_SECRET is unset while FIELDPILOT_ENV is production/staging. "
+            "Generate one with:  python -c \"import secrets;print(secrets.token_urlsafe(48))\""
+        )
+    print("[AUTH] ⚠ using the built-in development JWT secret — anyone who has "
+          "read this repo can forge a token. Set JWT_SECRET before exposing "
+          "this API beyond localhost.")
 ACCESS_TOKEN_EXPIRE_HOURS = 8  # matches system_prompt.md Section 9.1's "JWT tokens with 8-hour expiry"
 
 bearer_scheme = HTTPBearer(auto_error=False)
