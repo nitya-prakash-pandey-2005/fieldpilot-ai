@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Mic, Loader, Search, Volume2, X } from 'lucide-react';
 
+import { apiBase } from '@/lib/api';
 export default function VoiceSearchBar() {
   const [state, setState] = useState<'IDLE' | 'RECORDING' | 'PROCESSING' | 'RESPONDING'>('IDLE');
   const [transcript, setTranscript] = useState('');
@@ -74,7 +75,7 @@ export default function VoiceSearchBar() {
       formData.append('zone_id', 'A12'); // Mock for dashboard context
       formData.append('worker_id', 'Admin-01');
 
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "";
+      const apiUrl = apiBase();
       const res = await fetch(`${apiUrl}/api/v1/voice/query`, {
         method: 'POST',
         body: formData,

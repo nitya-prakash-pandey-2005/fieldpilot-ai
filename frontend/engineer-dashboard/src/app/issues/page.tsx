@@ -8,6 +8,7 @@ import { SEVERITY } from '@/theme/severityColors';
 import IssueDetailPanel from '@/components/issues/IssueDetailPanel';
 import { format } from 'date-fns';
 
+import { apiBase } from '@/lib/api';
 function issueTime(dateStr: string): string {
   const d = new Date(dateStr);
   const age = Date.now() - d.getTime();
@@ -48,7 +49,7 @@ export default function IssuesPage() {
   const handleExport = async () => {
     setExporting(true);
     try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000"}/api/v1/projects/default-project/issues/export`, {
+      const res = await fetch(`${apiBase()}/api/v1/projects/default-project/issues/export`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ severity_filter: activeFilter, format: 'pdf' })

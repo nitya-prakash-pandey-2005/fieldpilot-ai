@@ -6,6 +6,7 @@ import { Bell, FileText, Camera, Volume2, Square } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import * as htmlToImage from 'html-to-image';
 
+import { apiBase } from '@/lib/api';
 export function ObservationPanel({ scanResult, zoneId = 'A12', workerId = 'WRK-001' }: { scanResult: any; zoneId?: string; workerId?: string }) {
   const router = useRouter();
   const [isPlaying, setIsPlaying] = useState(false);
@@ -48,7 +49,7 @@ export function ObservationPanel({ scanResult, zoneId = 'A12', workerId = 'WRK-0
   const handleNotify = async () => {
     if (!scanResult) return;
     try {
-      await fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000"}/api/v1/notification/dispatch`, { 
+      await fetch(`${apiBase()}/api/v1/notification/dispatch`, { 
         method: 'POST', 
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

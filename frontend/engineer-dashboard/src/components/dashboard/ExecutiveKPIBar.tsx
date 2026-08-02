@@ -4,6 +4,7 @@ import React, { useEffect, useState } from 'react';
 import { ShieldCheck, Crosshair, Clock, Users } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
+import { apiBase } from '@/lib/api';
 export function ExecutiveKPIBar() {
   const router = useRouter();
   const [data, setData] = useState({
@@ -15,7 +16,7 @@ export function ExecutiveKPIBar() {
   const [isLive, setIsLive] = useState(false);
 
   useEffect(() => {
-    const API = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+    const API = apiBase();
 
     const fetchAll = async () => {
       // Each source is fetched independently so a failure in one (e.g. no

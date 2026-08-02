@@ -5,6 +5,7 @@ import { GlassCard } from '../ui/GlassCard';
 import { LiveIndicator } from '../ui/LiveIndicator';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Legend, ReferenceLine, Label } from 'recharts';
 
+import { apiBase } from '@/lib/api';
 // No illustrative fallback series lives here any more.
 //
 // This component used to render a plausible seven-day cost curve and a
@@ -56,7 +57,7 @@ export function ExecutiveCharts() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const API = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+    const API = apiBase();
     let cancelled = false;
 
     const load = async () => {

@@ -6,7 +6,8 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useZones, getRiskLevel } from '@/hooks/useZones';
 import { useAuth, ROLE_LABELS, Role } from '@/context/AuthContext';
 
-const API = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+import { apiBase } from '@/lib/api';
+const API = apiBase();
 
 export function Sidebar() {
   const pathname = usePathname();

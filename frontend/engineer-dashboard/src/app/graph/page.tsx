@@ -6,7 +6,8 @@ import { GlassCard } from '@/components/ui/GlassCard';
 import { GraphCanvas, GraphNode } from '@/components/graph/GraphCanvas';
 import { SEVERITY } from '@/theme/severityColors';
 
-const API = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+import { apiBase } from '@/lib/api';
+const API = apiBase();
 const POLL_INTERVAL_MS = 20_000;
 
 // Real payload from GET /api/v1/graph/full (api/routes/knowledge_graph.py)

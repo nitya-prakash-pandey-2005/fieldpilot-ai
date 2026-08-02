@@ -5,6 +5,7 @@ import { useZones, getRiskLevel } from '@/hooks/useZones';
 import { useAuth } from '@/context/AuthContext';
 import { format, formatDistanceToNow } from 'date-fns';
 
+import { apiBase } from '@/lib/api';
 // Derived from the same CSS var tokens used across the rest of the app
 // (globals.css's @theme block) instead of raw hex, so this page no longer
 // breaks under the light theme toggle (Header.tsx's ThemeToggle) the way
@@ -56,7 +57,7 @@ export default function ZonesPage() {
     setSelectedZoneIdForIssues(zoneId);
     setIssuesLoading(true);
     try {
-      const BASE = process.env.NEXT_PUBLIC_API_URL || "";
+      const BASE = apiBase();
       const res = await fetch(`${BASE}/api/v1/zones/${zoneId}/issues`);
       const data = await res.json();
       setZoneIssues(data.issues || []);
@@ -71,7 +72,7 @@ export default function ZonesPage() {
   const handleAlertTeam = async (zoneId: string) => {
     setAlertLoadingId(zoneId);
     try {
-      const BASE = process.env.NEXT_PUBLIC_API_URL || "";
+      const BASE = apiBase();
       const res = await fetch(`${BASE}/api/v1/zones/${zoneId}/alerts`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

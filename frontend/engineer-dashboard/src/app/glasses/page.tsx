@@ -10,6 +10,7 @@ import { TranscriptPanel } from '@/components/dashboard/TranscriptPanel';
 import { ObservationPanel } from '@/components/dashboard/ObservationPanel';
 import { LiveCameraPanel } from '@/components/dashboard/LiveCameraPanel';
 import { analyzeSceneReal } from '@/lib/visionAnalysis';
+import { apiBase } from '@/lib/api';
 
 export const SCENARIOS = [
   {
@@ -302,7 +303,7 @@ export default function GlassesPage() {
           <LiveCameraPanel
             workerId={currentWorker}
             zoneId={currentZone}
-            apiBase={process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}
+            apiBase={apiBase()}
           />
           {cameraSource !== 'laptop' && (
             <div className="mt-3 px-4 py-2 rounded-lg text-xs font-mono text-center"

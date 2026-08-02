@@ -6,6 +6,7 @@ import { useAPIData } from '@/hooks/useAPIData';
 import { ComplianceCard, ComplianceIssue } from '../ui/ComplianceCard';
 import { useAuth } from '@/context/AuthContext';
 
+import { apiBase } from '@/lib/api';
 // Shape matches the real GET /api/v1/compliance/issues response (see
 // ComplianceCard.tsx) — previously this demo data (and the live-fetch
 // code path) used a different shape (description/timestamp/zone/worker/
@@ -41,7 +42,7 @@ export function ActiveIssuesPanel() {
     // (`/api/v1/issues/${id}/reject`, no API base) against the ComplianceEvent's
     // id, which would 404 against the Next.js server itself rather than
     // reaching the FastAPI backend at all.
-    const API = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+    const API = apiBase();
     try {
       const res = await fetch(`${API}/api/v1/issues/${issue.field_issue_id}/reject`, {
         method: 'POST',

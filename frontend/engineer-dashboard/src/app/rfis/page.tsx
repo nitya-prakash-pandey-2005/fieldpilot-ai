@@ -8,7 +8,8 @@ import { useZones } from '@/hooks/useZones';
 import { LiveIndicator } from '@/components/ui/LiveIndicator';
 import { DraftRFIModal } from '@/components/dashboard/DraftRFIModal';
 
-const API = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+import { apiBase } from '@/lib/api';
+const API = apiBase();
 
 // Real predictions come from POST /api/v1/rfi/predict (agents/predictive_rfi/
 // predictor.py — real Neo4j historical-RFI query + LLM prediction), called

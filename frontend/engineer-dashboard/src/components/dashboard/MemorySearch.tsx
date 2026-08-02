@@ -6,7 +6,8 @@ import { Search, Loader2, Database, Sparkles, AlertTriangle, FileText, BookOpen 
 import { useAuth } from '@/context/AuthContext';
 import { useZones } from '@/hooks/useZones';
 
-const API = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+import { apiBase } from '@/lib/api';
+const API = apiBase();
 
 const EXAMPLE_QUERIES = [
   'At what height must fall protection be provided?',

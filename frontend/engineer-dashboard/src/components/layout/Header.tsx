@@ -7,7 +7,8 @@ import { ThemeToggle } from './ThemeToggle';
 import { useConnectionStatus } from '../../hooks/useConnectionStatus';
 import { useAuth, ROLE_LABELS } from '@/context/AuthContext';
 
-const API = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+import { apiBase } from '@/lib/api';
+const API = apiBase();
 
 export function Header() {
   const { status } = useConnectionStatus();

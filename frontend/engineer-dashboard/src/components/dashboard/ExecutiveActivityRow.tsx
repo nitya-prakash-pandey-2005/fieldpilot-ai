@@ -5,7 +5,8 @@ import { GlassCard } from '../ui/GlassCard';
 import { LiveIndicator } from '../ui/LiveIndicator';
 import { Download } from 'lucide-react';
 
-const API = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+import { apiBase } from '@/lib/api';
+const API = apiBase();
 
 // Real per-agent operational status from GET /api/v1/health/agents
 // (actually tests Postgres/Neo4j/Qdrant/Groq connectivity — see

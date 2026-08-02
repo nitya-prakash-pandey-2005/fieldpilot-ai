@@ -10,7 +10,8 @@ import { formatDistanceToNow, format } from 'date-fns';
 import { LiveIndicator } from '@/components/ui/LiveIndicator';
 import { GlassCard } from '@/components/ui/GlassCard';
 
-const API = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+import { apiBase } from '@/lib/api';
+const API = apiBase();
 const POLL_INTERVAL_MS = 20_000;
 
 // Shape matches GET /api/v1/notification/active (api/routes/notification.py

@@ -7,10 +7,11 @@ import { LiveIndicator } from '@/components/ui/LiveIndicator';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import type { TwinIssue } from '@/components/ThreeSiteViewer';
 
+import { apiBase } from '@/lib/api';
 // react-three-fiber's Canvas needs the browser (WebGL) — load client-side only.
 const ThreeSiteViewer = dynamic(() => import('@/components/ThreeSiteViewer'), { ssr: false });
 
-const API = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+const API = apiBase();
 const ISSUES_POLL_MS = 15_000;
 
 // Same zone_code -> position lookup convention as LiveSiteMap.tsx, just in

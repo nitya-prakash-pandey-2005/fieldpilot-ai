@@ -2,6 +2,8 @@
 
 import React, { useEffect, useRef, useState, useCallback } from "react";
 import { AttentionIndicator } from "../ui/AttentionIndicator";
+// Aliased: this component already has an `apiBase` prop.
+import { apiBase as resolveApiBase } from "@/lib/api";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -69,7 +71,9 @@ const PPE_ICONS: { key: keyof ComplianceWorker; label: string; emoji: string }[]
 export function LiveCameraPanel({
   workerId = "WRK-001",
   zoneId   = "A12",
-  apiBase  = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000",
+  // Aliased on import: this component already exposes an `apiBase` prop, so an
+  // unaliased import would shadow itself in the default value.
+  apiBase  = resolveApiBase(),
 }: Props) {
   const canvasRef   = useRef<HTMLCanvasElement>(null);
   const wsRef       = useRef<WebSocket | null>(null);

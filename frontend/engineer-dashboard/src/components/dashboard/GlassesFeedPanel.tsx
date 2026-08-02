@@ -5,6 +5,8 @@ import { GlassCard } from '../ui/GlassCard';
 import { Upload, RefreshCw, Play, Loader2, Glasses as GlassesIcon, Camera as CameraIcon, Upload as UploadIcon, Radio } from 'lucide-react';
 import { toast } from 'sonner';
 import { analyzeSceneReal } from '@/lib/visionAnalysis';
+// Aliased: local `apiBase` consts inside this component would shadow it.
+import { apiBase as resolveApiBase } from '@/lib/api';
 
 interface ZoneAdvisory {
   zone_id: string;
@@ -131,7 +133,7 @@ export function GlassesFeedPanel({
   };
 
   const connectGlasses = () => {
-    const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+    const apiBase = resolveApiBase();
     const wsUrl = apiBase.replace("http://", "ws://").replace("https://", "wss://") + `/ws/glasses/${workerId}`;
     const ws = new WebSocket(wsUrl);
     ws.onopen = () => setGlassesConnected(true);
@@ -170,7 +172,7 @@ export function GlassesFeedPanel({
   // a second browser tab with the same zoneId to see an advisory from one
   // tab's hazard reach the other tab, but NOT a tab on a different zone.
   useEffect(() => {
-    const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+    const apiBase = resolveApiBase();
     const wsUrl = apiBase.replace("http://", "ws://").replace("https://", "wss://") + `/ws/zone/${zoneId}`;
     const ws = new WebSocket(wsUrl);
     ws.onopen = () => setZoneChannelConnected(true);

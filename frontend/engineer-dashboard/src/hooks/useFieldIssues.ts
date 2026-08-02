@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { toast } from 'sonner';
 
+import { apiBase } from '@/lib/api';
 export interface FieldIssue {
   id: string;
   project_id: string;
@@ -50,7 +51,7 @@ export function useFieldIssues(projectId: string = 'default-project') {
   const fetchIssues = useCallback(async () => {
     try {
       setIsLoading(true);
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000"}/api/v1/projects/${projectId}/issues`);
+      const res = await fetch(`${apiBase()}/api/v1/projects/${projectId}/issues`);
       if (!res.ok) throw new Error('Failed to fetch issues');
       const data = await res.json();
       setIssues(data.issues);
@@ -72,7 +73,7 @@ export function useFieldIssues(projectId: string = 'default-project') {
   }, [fetchIssues]);
 
   useEffect(() => {
-    const eventSource = new EventSource(`${process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000"}/api/v1/projects/${projectId}/issues/stream`);
+    const eventSource = new EventSource(`${apiBase()}/api/v1/projects/${projectId}/issues/stream`);
 
     eventSource.onmessage = (e) => {
       try {
@@ -121,7 +122,7 @@ export function useFieldIssues(projectId: string = 'default-project') {
 
   const resolveIssue = async (issueId: string, note: string, resolvedByUserId: string = 'current_user') => {
     try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000"}/api/v1/issues/${issueId}/resolve`, {
+      const res = await fetch(`${apiBase()}/api/v1/issues/${issueId}/resolve`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ resolved_by_user_id: resolvedByUserId, resolution_note: note })
@@ -143,7 +144,7 @@ export function useFieldIssues(projectId: string = 'default-project') {
 
   const escalateIssue = async (issueId: string, role: string, note: string, escalatedByUserId: string = 'current_user') => {
     try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000"}/api/v1/issues/${issueId}/escalate`, {
+      const res = await fetch(`${apiBase()}/api/v1/issues/${issueId}/escalate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ escalated_by_user_id: escalatedByUserId, escalate_to_role: role, note })

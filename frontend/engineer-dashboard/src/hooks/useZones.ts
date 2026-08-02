@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 
+import { apiBase } from '@/lib/api';
 export type RiskLevel = 'critical' | 'elevated' | 'normal';
 
 export const getRiskLevel = (score: number): RiskLevel => {
@@ -36,7 +37,7 @@ export function useZones(projectId: string = "default-project") {
   const [connectionStatus, setConnectionStatus] = useState<'live' | 'demo' | 'offline'>('offline');
   
   useEffect(() => {
-    const BASE = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+    const BASE = apiBase();
     
     // Initial fetch
     const fetchZones = async () => {

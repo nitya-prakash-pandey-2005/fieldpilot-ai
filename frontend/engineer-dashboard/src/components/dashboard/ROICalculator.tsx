@@ -5,6 +5,7 @@ import { GlassCard } from '../ui/GlassCard';
 import { LiveIndicator } from '../ui/LiveIndicator';
 import { Calculator, DollarSign, Clock, ShieldAlert, Hammer } from 'lucide-react';
 
+import { apiBase } from '@/lib/api';
 // Industry baseline assumptions this projection is built on (see
 // system_prompt.md Section 2.1's cited figures: rework 5-15% of project
 // cost, RFI response time 6-10 working days). This is a forward-looking
@@ -27,7 +28,7 @@ export function ROICalculator() {
   const [actual, setActual] = useState<{ cost: number; incidents: number; rework: number } | null>(null);
 
   useEffect(() => {
-    const API = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+    const API = apiBase();
     fetch(`${API}/api/v1/learning/stats`)
       .then(r => r.ok ? r.json() : Promise.reject())
       .then(stats => {

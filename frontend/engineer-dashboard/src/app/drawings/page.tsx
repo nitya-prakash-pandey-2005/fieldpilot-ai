@@ -5,7 +5,8 @@ import { toast } from 'sonner';
 import { mockDrawings } from '@/data/mockData';
 import { LiveIndicator } from '@/components/ui/LiveIndicator';
 
-const API = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+import { apiBase } from '@/lib/api';
+const API = apiBase();
 
 // Real list from GET /api/v1/drawing/list — grouped from actual Qdrant
 // chunk payloads written by /parse (agents/drawing/indexer.py), merged
