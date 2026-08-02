@@ -433,6 +433,33 @@ async def cleanup_verification_data() -> str:
         except Exception as e:
             removed[label] = f"FAILED ({type(e).__name__}: {str(e)[:60]})"
 
+    # Neo4j too. ComplianceEngine.validate() writes an Inspection node on every
+    # verdict via agents/knowledge_graph/writer.py, so verification leaves
+    # Zone/Asset/Inspection nodes behind in the graph. Cleaning only Postgres
+    # left ZZ-VERIFY assets visible on the Knowledge Graph page — a junk node
+    # sitting next to the real ones during a demo.
+    try:
+        from neo4j import GraphDatabase
+
+        from utils.neo4j_config import DRIVER_KWARGS, auth, uri
+
+        driver = GraphDatabase.driver(uri(), auth=auth(), **DRIVER_KWARGS)
+        with driver.session() as s:
+            result = s.run(
+                """
+                MATCH (z:Zone {id: $zone})
+                OPTIONAL MATCH (a:Asset)-[:LOCATED_IN]->(z)
+                OPTIONAL MATCH (i:Inspection)-[:INSPECTS]->(a)
+                DETACH DELETE i, a, z
+                RETURN count(DISTINCT a) AS assets
+                """,
+                zone=VERIFY_ZONE,
+            ).single()
+            removed["neo4j_nodes"] = (result["assets"] if result else 0)
+        driver.close()
+    except Exception as e:
+        removed["neo4j_nodes"] = f"skipped ({type(e).__name__})"
+
     return ", ".join(f"{k}={v}" for k, v in removed.items())
 
 

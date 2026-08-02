@@ -49,6 +49,34 @@ function inspectionColor(result?: string) {
   return 'var(--text-muted)';
 }
 
+/**
+ * Fields hidden from the Node Details panel.
+ *
+ * `id`/`type`/`label` are already shown in the header. The rest are mutated
+ * onto each node object by the d3-force simulation in GraphCanvas — x/y are the
+ * current pixel position, vx/vy the velocity, fx/fy a drag pin, index the array
+ * slot. They change every animation frame and mean nothing to an engineer, but
+ * they were being rendered as if they were asset properties, so a rebar node
+ * listed "x 785.4481311849731" directly under "latest inspection result FAIL".
+ */
+const HIDDEN_NODE_FIELDS = new Set([
+  'id', 'type', 'label',
+  'x', 'y', 'vx', 'vy', 'fx', 'fy', 'index',
+]);
+
+/** Render values readably: round the floats, expand arrays/objects. */
+function formatNodeValue(v: unknown): string {
+  if (typeof v === 'number') {
+    return Number.isInteger(v) ? String(v) : String(Math.round(v * 1000) / 1000);
+  }
+  if (typeof v === 'boolean') return v ? 'yes' : 'no';
+  if (Array.isArray(v)) return v.length ? v.join(', ') : '—';
+  if (typeof v === 'object' && v !== null) {
+    try { return JSON.stringify(v); } catch { return String(v); }
+  }
+  return String(v);
+}
+
 function colorForNode(node: GraphNode): string {
   switch (node.type) {
     case 'project': return 'var(--cyan)';
@@ -248,31 +276,49 @@ export default function GraphPage() {
           </div>
         </div>
 
-        <div className="overflow-y-auto min-h-0">
-          <GlassCard className="p-5 h-full">
-            <h3 className="text-xs font-bold uppercase tracking-widest text-[var(--text-primary)] mb-4 flex items-center gap-2">
+        {/* The scroll container has to live INSIDE the card. GlassCard sets
+            `overflow-hidden`, so it clips its own content before an outer
+            `overflow-y-auto` can ever scroll it — which is why a node with
+            many properties had its lower half silently cut off. */}
+        <div className="min-h-0">
+          <GlassCard className="p-5 h-full flex flex-col">
+            <h3 className="text-xs font-bold uppercase tracking-widest text-[var(--text-primary)] mb-4 flex items-center gap-2 shrink-0">
               <Info size={14} className="text-[var(--text-muted)]" /> Node Details
             </h3>
             {!selected ? (
               <p className="text-sm text-[var(--text-muted)] italic">Click a node in the graph to inspect its real properties.</p>
             ) : (
-              <div className="space-y-3">
-                <div className="flex items-center gap-2 mb-2">
-                  <span className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: colorForNode(selected) }} />
-                  <span className="text-[10px] uppercase tracking-widest font-bold" style={{ color: colorForNode(selected) }}>
-                    {TYPE_META[selected.type]?.label || selected.type}
-                  </span>
+              <div className="flex flex-col min-h-0 flex-1">
+                <div className="shrink-0">
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: colorForNode(selected) }} />
+                    <span className="text-[10px] uppercase tracking-widest font-bold" style={{ color: colorForNode(selected) }}>
+                      {TYPE_META[selected.type]?.label || selected.type}
+                    </span>
+                  </div>
+                  <h4 className="text-lg font-bold text-[var(--text-primary)] break-words mb-3">{selected.label}</h4>
                 </div>
-                <h4 className="text-lg font-bold text-[var(--text-primary)] break-words">{selected.label}</h4>
-                <div className="flex flex-col gap-2">
-                  {Object.entries(selected)
-                    .filter(([k]) => !['id', 'type', 'label'].includes(k))
-                    .map(([k, v]) => (
-                      <div key={k} className="bg-[var(--bg-elevated)] rounded-lg p-2.5">
+
+                <div className="flex flex-col gap-2 overflow-y-auto min-h-0 flex-1 pr-1
+                                [scrollbar-width:thin] [scrollbar-color:var(--border-subtle)_transparent]">
+                  {(() => {
+                    const rows = Object.entries(selected).filter(([k]) => !HIDDEN_NODE_FIELDS.has(k));
+                    if (rows.length === 0) {
+                      return (
+                        <p className="text-[12px] text-[var(--text-muted)] italic">
+                          This node carries no properties beyond its type and label.
+                        </p>
+                      );
+                    }
+                    return rows.map(([k, v]) => (
+                      <div key={k} className="bg-[var(--bg-elevated)] rounded-lg p-2.5 shrink-0">
                         <span className="text-[10px] uppercase tracking-widest text-[var(--text-muted)] block mb-0.5">{k.replace(/_/g, ' ')}</span>
-                        <span className="text-[var(--text-primary)] text-sm break-words">{v === null || v === undefined || v === '' ? '—' : String(v)}</span>
+                        <span className="text-[var(--text-primary)] text-sm break-words">
+                          {v === null || v === undefined || v === '' ? '—' : formatNodeValue(v)}
+                        </span>
                       </div>
-                    ))}
+                    ));
+                  })()}
                 </div>
               </div>
             )}
