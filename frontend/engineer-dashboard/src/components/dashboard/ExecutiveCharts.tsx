@@ -5,25 +5,33 @@ import { GlassCard } from '../ui/GlassCard';
 import { LiveIndicator } from '../ui/LiveIndicator';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Legend, ReferenceLine, Label } from 'recharts';
 
-// Fallback demo data, shown only until GET /api/v1/learning/trends returns
-// real rows (see fetchTrends below) — previously this was permanently
-// hardcoded and the real endpoint was never called at all.
-const DEMO_RISK_DATA = [
-  { name: 'Mon', risk: 85, avg: 45 },
-  { name: 'Tue', risk: 78, avg: 45 },
-  { name: 'Wed', risk: 65, avg: 45 },
-  { name: 'Thu', risk: 52, avg: 45 },
-  { name: 'Fri', risk: 41, avg: 45 },
-  { name: 'Sat', risk: 35, avg: 45 },
-  { name: 'Sun', risk: 28, avg: 45 },
-];
+// No illustrative fallback series lives here any more.
+//
+// This component used to render a plausible seven-day cost curve and a
+// four-week incident chart whenever the backend had nothing to show. Those
+// numbers were invented, but on screen they were indistinguishable from
+// measured ones — a chart that says "$47,000 avoided on Thursday" reads as
+// fact whatever a small LIVE badge next to it says. When the underlying data
+// is empty the honest thing to draw is nothing, plus an explanation of what
+// would fill it.
 
-const DEMO_INCIDENT_DATA = [
-  { name: 'Week 1', prevented: 14, occurred: 2 },
-  { name: 'Week 2', prevented: 20, occurred: 1 },
-  { name: 'Week 3', prevented: 25, occurred: 0 },
-  { name: 'Week 4', prevented: 18, occurred: 2 },
-];
+type EmptyStateProps = { title: string; hint: string; error?: string | null };
+
+function ChartEmptyState({ title, hint, error }: EmptyStateProps) {
+  return (
+    <div className="flex-1 flex flex-col items-center justify-center text-center px-6 gap-2">
+      <div className="w-10 h-10 rounded-full border border-dashed border-[var(--border-subtle)] flex items-center justify-center text-[var(--text-muted)] text-lg">
+        {error ? '!' : '—'}
+      </div>
+      <p className="text-[13px] font-medium text-[var(--text-secondary)]">
+        {error ? 'Cannot load this metric' : title}
+      </p>
+      <p className="text-[11px] text-[var(--text-muted)] max-w-[280px] leading-relaxed">
+        {error ?? hint}
+      </p>
+    </div>
+  );
+}
 
 const CustomBarTooltip = ({ active, payload, label }: any) => {
   if (active && payload && payload.length) {
@@ -41,29 +49,47 @@ const CustomBarTooltip = ({ active, payload, label }: any) => {
 };
 
 export function ExecutiveCharts() {
-  const [costData, setCostData] = useState<{ name: string; cost: number }[]>(DEMO_RISK_DATA.map(d => ({ name: d.name, cost: 0 })));
-  const [incidentData, setIncidentData] = useState<{ name: string; incidents: number }[]>(
-    DEMO_INCIDENT_DATA.map(d => ({ name: d.name, incidents: d.prevented }))
-  );
+  const [costData, setCostData] = useState<{ name: string; cost: number }[]>([]);
+  const [incidentData, setIncidentData] = useState<{ name: string; incidents: number }[]>([]);
   const [isLive, setIsLive] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const API = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
-    fetch(`${API}/api/v1/learning/trends`)
-      .then(r => r.ok ? r.json() : Promise.reject())
-      .then(json => {
-        const rows = json?.data || [];
-        if (rows.length > 0) {
-          setCostData(rows.map((r: any) => ({ name: r.date.slice(5), cost: r.cost_avoided })));
-          setIncidentData(rows.map((r: any) => ({ name: r.date.slice(5), incidents: r.incidents })));
-          setIsLive(true);
+    let cancelled = false;
+
+    const load = async () => {
+      try {
+        const res = await fetch(`${API}/api/v1/learning/trends`);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const json = await res.json();
+        if (cancelled) return;
+        const rows = json?.data ?? [];
+        setCostData(rows.map((r: any) => ({ name: String(r.date).slice(5), cost: r.cost_avoided })));
+        setIncidentData(rows.map((r: any) => ({ name: String(r.date).slice(5), incidents: r.incidents })));
+        setIsLive(rows.length > 0);
+        setError(null);
+      } catch (e: any) {
+        if (!cancelled) {
+          setIsLive(false);
+          setError(`Backend unreachable at ${API}`);
         }
-        // If there's no real data yet (fresh install, nothing resolved
-        // today), keep showing the illustrative demo series above rather
-        // than an empty chart.
-      })
-      .catch(() => setIsLive(false));
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+
+    load();
+    // Executive metrics move as engineers resolve issues during a walkthrough;
+    // refreshing keeps the panel honest without a manual reload.
+    const timer = setInterval(load, 30_000);
+    return () => { cancelled = true; clearInterval(timer); };
   }, []);
+
+  const EMPTY_HINT =
+    'Populated from resolved incidents. Resolve an issue on the Issues page ' +
+    '(or POST /api/v1/learning/resolve) and it appears here within 30s.';
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 w-full">
@@ -73,6 +99,13 @@ export function ExecutiveCharts() {
           <LiveIndicator isLive={isLive} />
         </div>
         <p className="text-[10px] text-[var(--text-muted)] font-mono -mt-4 mb-2">Daily cost avoided (USD), from resolved incidents</p>
+        {!loading && costData.length === 0 ? (
+          <ChartEmptyState
+            title="No resolved incidents yet"
+            hint={EMPTY_HINT}
+            error={error}
+          />
+        ) : (
         <div className="flex-1 w-full min-h-0">
           <ResponsiveContainer width="100%" height="100%">
             <AreaChart data={costData} margin={{ top: 20, right: 30, left: -20, bottom: 0 }}>
@@ -94,6 +127,7 @@ export function ExecutiveCharts() {
             </AreaChart>
           </ResponsiveContainer>
         </div>
+        )}
       </GlassCard>
 
       <GlassCard className="p-6 h-[400px] flex flex-col relative">
@@ -101,6 +135,13 @@ export function ExecutiveCharts() {
           <h3 className="text-sm font-semibold tracking-wide text-[var(--text-primary)] uppercase">Incidents Resolved Per Day</h3>
           <LiveIndicator isLive={isLive} />
         </div>
+        {!loading && incidentData.length === 0 ? (
+          <ChartEmptyState
+            title="No incidents resolved yet"
+            hint={EMPTY_HINT}
+            error={error}
+          />
+        ) : (
         <div className="flex-1 w-full min-h-0">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={incidentData} margin={{ top: 10, right: 30, left: 0, bottom: 20 }}>
@@ -113,6 +154,7 @@ export function ExecutiveCharts() {
             </BarChart>
           </ResponsiveContainer>
         </div>
+        )}
       </GlassCard>
     </div>
   );

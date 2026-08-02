@@ -397,25 +397,43 @@ async def cleanup_verification_data() -> str:
         from models.compliance import ComplianceEvent
         from models.interaction import Interaction
         from models.issues import FieldIssue
-        from sqlalchemy import delete, or_
-
-        removed = {}
-        async with async_session() as s:
-            for model, cond, label in (
-                (FieldIssue, FieldIssue.zone_code == VERIFY_ZONE, "field_issues"),
-                (ComplianceEvent, ComplianceEvent.zone_code == VERIFY_ZONE, "compliance_events"),
-                (Interaction, or_(Interaction.zone_code == VERIFY_ZONE,
-                                  Interaction.worker_id == VERIFY_WORKER), "interactions"),
-            ):
-                try:
-                    result = await s.execute(delete(model).where(cond))
-                    removed[label] = result.rowcount or 0
-                except Exception as e:
-                    removed[label] = f"skipped ({type(e).__name__})"
-            await s.commit()
-        return ", ".join(f"{k}={v}" for k, v in removed.items())
+        from sqlalchemy import delete, or_, select
     except Exception as e:
         return f"cleanup unavailable: {e}"
+
+    # Children before parents: ComplianceEvent.field_issue_id is a foreign key
+    # to FieldIssue, so deleting the issue first is a constraint violation.
+    # SQLite silently tolerated it; Postgres does not — which is why this
+    # reported "skipped" for everything once the stack moved onto Postgres.
+    steps = [
+        ("compliance_events", ComplianceEvent, ComplianceEvent.zone_code == VERIFY_ZONE),
+        ("field_issues", FieldIssue, FieldIssue.zone_code == VERIFY_ZONE),
+        ("interactions", Interaction, or_(Interaction.zone_code == VERIFY_ZONE,
+                                          Interaction.worker_id == VERIFY_WORKER)),
+    ]
+
+    removed: dict[str, object] = {}
+    for label, model, cond in steps:
+        # One transaction per step. Sharing a session means the first failure
+        # aborts the transaction and every later statement fails with a bare
+        # DBAPIError, hiding which delete actually broke.
+        try:
+            async with async_session() as s:
+                # Belt and braces: drop any ComplianceEvent still pointing at a
+                # doomed FieldIssue even if its own zone_code wasn't tagged.
+                if model is FieldIssue:
+                    doomed = (await s.execute(
+                        select(FieldIssue.id).where(cond))).scalars().all()
+                    if doomed:
+                        await s.execute(delete(ComplianceEvent).where(
+                            ComplianceEvent.field_issue_id.in_(doomed)))
+                result = await s.execute(delete(model).where(cond))
+                await s.commit()
+                removed[label] = result.rowcount if result.rowcount is not None else 0
+        except Exception as e:
+            removed[label] = f"FAILED ({type(e).__name__}: {str(e)[:60]})"
+
+    return ", ".join(f"{k}={v}" for k, v in removed.items())
 
 
 def main() -> int:
