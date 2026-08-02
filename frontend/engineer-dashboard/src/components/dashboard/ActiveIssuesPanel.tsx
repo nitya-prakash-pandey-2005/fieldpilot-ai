@@ -7,30 +7,90 @@ import { ComplianceCard, ComplianceIssue } from '../ui/ComplianceCard';
 import { useAuth } from '@/context/AuthContext';
 
 import { apiBase } from '@/lib/api';
-// Shape matches the real GET /api/v1/compliance/issues response (see
-// ComplianceCard.tsx) — previously this demo data (and the live-fetch
-// code path) used a different shape (description/timestamp/zone/worker/
-// measured/spec/deviation) the backend never actually served, which only
-// stayed invisible because the endpoint had no real rows before Agent 5's
-// FAIL path was wired to persist ComplianceEvent (see agents/compliance/
-// validator.py).
-const DEMO_ISSUES: ComplianceIssue[] = [
-  { id: "OBS-049", zone_code: "A12", asset_id: "rebar_grid_C4", severity: "CRITICAL", measured_value: 190, spec_value: 150, deviation_pct: 26.7, confidence: 0.93, worker_id: "Ali Hassan", status: "open", created_at: new Date(Date.now() - 2 * 60 * 1000).toISOString() },
-  { id: "OBS-048", zone_code: "D4", asset_id: "generator_bay", severity: "MEDIUM", measured_value: null, spec_value: null, deviation_pct: null, confidence: null, worker_id: "Sarah Chen", status: "open", created_at: new Date(Date.now() - 12 * 60 * 1000).toISOString() },
-  { id: "OBS-047", zone_code: "A12", asset_id: "harness_check", severity: "HIGH", measured_value: null, spec_value: null, deviation_pct: null, confidence: null, worker_id: "Mark Davis", status: "open", created_at: new Date(Date.now() - 45 * 60 * 1000).toISOString() },
-  { id: "OBS-046", zone_code: "B3", asset_id: "egress_route", severity: "MEDIUM", measured_value: null, spec_value: null, deviation_pct: null, confidence: null, worker_id: "Tom Wilson", status: "open", created_at: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString() },
-];
+
+/**
+ * The Command Center's Active Issues panel.
+ *
+ * It used to read GET /api/v1/compliance/issues, which serves the
+ * `compliance_events` table. That table only gains a row when Agent 5 runs a
+ * live validation, whereas every other page (Issues, Zones, the worker detail
+ * page) reads `field_issues`. So the Command Center showed nothing while the
+ * Issues page listed five — the same site, two different tables, and the
+ * landing page was the empty one.
+ *
+ * Now reads the same `field_issues` source as everywhere else, mapped into the
+ * shape ComplianceCard renders. The DEMO_ISSUES fallback is gone: an empty
+ * panel that says why is honest, four fabricated OBS-04x rows on the first
+ * screen a judge sees are not.
+ */
+
+type FieldIssue = {
+  id: string;
+  zone_code?: string | null;
+  issue_type?: string | null;
+  severity?: string | null;
+  status?: string | null;
+  description?: string | null;
+  measured_value?: string | null;
+  expected_value?: string | null;
+  deviation_pct?: number | string | null;
+  worker_id?: string | null;
+  created_at?: string | null;
+};
+
+/** "190mm" / "2.3 deg" -> 190 / 2.3. ComplianceCard wants numbers; FieldIssue
+ *  stores unit-suffixed strings. Returns null when there is no leading number
+ *  (e.g. "Drawing R3"), which the card already renders as "—". */
+function numericPart(v: string | null | undefined): number | null {
+  if (v == null) return null;
+  const m = String(v).match(/-?\d+(\.\d+)?/);
+  return m ? Number(m[0]) : null;
+}
+
+function toComplianceIssue(f: FieldIssue): ComplianceIssue {
+  return {
+    id: f.id,
+    field_issue_id: f.id,          // enables the reject (hard-negative) action
+    zone_code: f.zone_code ?? null,
+    asset_id: f.issue_type ?? null,
+    severity: (f.severity ?? 'low').toUpperCase(),
+    measured_value: numericPart(f.measured_value),
+    spec_value: numericPart(f.expected_value),
+    deviation_pct: f.deviation_pct == null ? null : Number(f.deviation_pct),
+    // field_issues carries no per-issue model confidence; showing a number
+    // here would invent one.
+    confidence: null,
+    worker_id: f.worker_id ?? null,
+    status: f.status ?? 'open',
+    created_at: f.created_at ?? new Date().toISOString(),
+  };
+}
 
 export function ActiveIssuesPanel() {
-  const { data: initialIssues } = useAPIData('/api/v1/compliance/issues', DEMO_ISSUES);
+  const { data: raw, error } = useAPIData<{ issues?: FieldIssue[] }>(
+    '/api/v1/projects/default-project/issues',
+    undefined,
+  );
   const [issues, setIssues] = React.useState<ComplianceIssue[]>([]);
   const { user } = useAuth();
 
   React.useEffect(() => {
-    if (initialIssues) {
-      setIssues(initialIssues);
-    }
-  }, [initialIssues]);
+    const rows = raw?.issues;
+    if (!rows) return;
+    setIssues(
+      rows
+        .filter(f => (f.status ?? 'open') === 'open')
+        .map(toComplianceIssue)
+        // Most severe first, then most recent — the Command Center should lead
+        // with what needs attention, not with whatever the DB returned first.
+        .sort((a, b) => {
+          const rank = (s: string) => ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'].indexOf(s.toUpperCase());
+          const d = rank(a.severity) - rank(b.severity);
+          if (d !== 0) return d;
+          return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+        }),
+    );
+  }, [raw]);
 
   const handleReject = async (issue: ComplianceIssue) => {
     // Optimistic UI update
@@ -78,9 +138,22 @@ export function ActiveIssuesPanel() {
       </div>
 
       <div className="flex-1 overflow-y-auto p-2">
-        {issues.map((issue) => (
-          <ComplianceCard key={issue.id} issue={issue} onReject={handleReject} />
-        ))}
+        {issues.length === 0 ? (
+          <div className="h-full flex flex-col items-center justify-center text-center px-6 gap-1.5 py-8">
+            <p className="text-[13px] text-[var(--text-secondary)]">
+              {error ? 'Cannot load issues' : 'No open issues'}
+            </p>
+            <p className="text-[11px] text-[var(--text-muted)] max-w-[280px] leading-relaxed">
+              {error
+                ? `Backend unreachable at ${apiBase()}.`
+                : 'Deviations detected by the vision and compliance agents appear here the moment they are raised.'}
+            </p>
+          </div>
+        ) : (
+          issues.map((issue) => (
+            <ComplianceCard key={issue.id} issue={issue} onReject={handleReject} />
+          ))
+        )}
       </div>
     </GlassCard>
   );

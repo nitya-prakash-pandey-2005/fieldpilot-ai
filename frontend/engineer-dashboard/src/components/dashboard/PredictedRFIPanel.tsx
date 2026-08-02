@@ -5,14 +5,26 @@ import { GlassCard } from '../ui/GlassCard';
 import { useAPIData } from '@/hooks/useAPIData';
 import { DraftRFIModal } from './DraftRFIModal';
 
-const DEMO_RFIS = [
-  { id: "RFI-PRED-102", title: "Clash between HVAC duct and sprinkler main in Corridor B", confidence: 0.94, impact: "High", action: "Draft RFI", zone: "Zone B3" },
-  { id: "RFI-PRED-103", title: "Missing dimensions for embed plates on Grid Line 4", confidence: 0.72, impact: "Medium", action: "Draft RFI", zone: "Zone D4" },
-  { id: "RFI-PRED-104", title: "Inconsistent fire rating specs for Door 120", confidence: 0.55, impact: "Low", action: "Draft RFI", zone: "Zone A12" },
-];
+// No DEMO_RFIS fallback. GET /api/v1/planning/predictions is real (Agent 6's
+// calibrated risk model plus an LLM-written rationale), so inventing three
+// plausible predictions when it fails would put fabricated engineering advice
+// — "clash between HVAC duct and sprinkler main" — on the landing page,
+// indistinguishable from the model's actual output.
+
+// Matches the real GET /api/v1/planning/predictions payload, verified against
+// a live response: { id, title, confidence, impact, action, zone }.
+type PredictedRFI = {
+  id: string;
+  title?: string;
+  confidence?: number;
+  impact?: string;
+  action?: string;
+  zone?: string;
+};
 
 export function PredictedRFIPanel() {
-  const { data: rfis } = useAPIData('/api/v1/planning/predictions', DEMO_RFIS);
+  const { data, error } = useAPIData<PredictedRFI[]>('/api/v1/planning/predictions');
+  const rfis: PredictedRFI[] = Array.isArray(data) ? data : [];
   const [selectedRFI, setSelectedRFI] = useState<any>(null);
   
   // Real-time timestamp mockup
@@ -34,9 +46,21 @@ export function PredictedRFIPanel() {
       </div>
 
       <div className="flex-1 overflow-y-auto p-2">
-        {rfis.map((rfi: any) => {
+        {rfis.length === 0 && (
+          <div className="h-full flex flex-col items-center justify-center text-center px-6 gap-1.5 py-8">
+            <p className="text-[13px] text-[var(--text-secondary)]">
+              {error ? 'Cannot load predictions' : 'No predicted RFIs'}
+            </p>
+            <p className="text-[11px] text-[var(--text-muted)] max-w-[290px] leading-relaxed">
+              {error
+                ? 'The predictive RFI agent is unreachable.'
+                : 'Agent 6 scores each zone from live issue history. Predictions appear once a zone accumulates enough signal.'}
+            </p>
+          </div>
+        )}
+        {rfis.map((rfi) => {
           // Circular progress config
-          const pct = Math.round(rfi.confidence * 100);
+          const pct = Math.round((rfi.confidence ?? 0) * 100);
           const circumference = 2 * Math.PI * 14;
           const strokeDashoffset = circumference - (pct / 100) * circumference;
           const circleColor = pct > 80 ? 'var(--pass)' : pct >= 60 ? 'var(--amber)' : 'var(--text-muted)';
@@ -76,12 +100,12 @@ export function PredictedRFIPanel() {
                 backgroundColor: rfi.impact === 'High' ? 'rgba(255,107,0,0.2)' : rfi.impact === 'Medium' ? 'rgba(0,152,255,0.2)' : 'rgba(128,128,160,0.2)',
                 color: rfi.impact === 'High' ? '#FF6B00' : rfi.impact === 'Medium' ? '#0098FF' : '#8080A0'
               }}>
-                {rfi.impact.toUpperCase()} IMPACT
+                {(rfi.impact ?? 'unknown').toUpperCase()} IMPACT
               </span>
               <button 
                 onClick={() => setSelectedRFI(rfi)}
                 className="text-[10px] font-bold bg-[var(--bg-elevated)] border border-[var(--border-subtle)] px-2 py-1 rounded hover:bg-[var(--purple-dim)] hover:border-[var(--purple)] hover:text-[var(--purple)] transition-colors uppercase w-24 text-center">
-                {rfi.action}
+                {rfi.action ?? 'Draft RFI'}
               </button>
             </div>
           </div>
