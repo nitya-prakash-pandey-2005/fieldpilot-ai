@@ -8,7 +8,7 @@ sys.path.append(root_dir)
 sys.path.append(api_dir)
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from routes import knowledge_graph, drawing_intelligence, vision, measurement, compliance, predictive_rfi, memory, version_control, notification, learning, health, voice, zones, issues, planning, live_feed, auth, interactions, rfi_draft
+from routes import knowledge_graph, drawing_intelligence, vision, measurement, compliance, predictive_rfi, memory, version_control, notification, learning, health, voice, zones, issues, planning, live_feed, auth, interactions, rfi_draft, localization
 import os
 
 from contextlib import asynccontextmanager
@@ -28,6 +28,7 @@ async def lifespan(app: FastAPI):
     from models.resolved_incident import ResolvedIncident
     from models.user import User
     from models.interaction import Interaction
+    from models.beacon import Beacon, WorkerPosition
     from sqlalchemy.ext.asyncio import AsyncSession
 
     async with engine.begin() as conn:
@@ -114,6 +115,7 @@ app.include_router(planning.router)
 app.include_router(live_feed.router)
 app.include_router(interactions.router)
 app.include_router(rfi_draft.router)
+app.include_router(localization.router)
 
 from datetime import datetime
 
