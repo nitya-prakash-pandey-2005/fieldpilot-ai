@@ -52,6 +52,34 @@ services:
     volumes:
       - neo4j_data:/data
 
+  # Media ingest. This is what the "glasses stream to the cloud" path actually
+  # terminates on: the phone (or OBS, or ffmpeg) PUBLISHES to rtmp://host:1935,
+  # and the ingest worker CONSUMES the same stream over RTSP, which is lower
+  # latency to pull than RTMP and does not require a second RTMP client.
+  #
+  # mediamtx rather than nginx-rtmp: it speaks RTMP in and RTSP/HLS/WebRTC out
+  # from one process with no build step, so the same published stream can be
+  # consumed by the vision pipeline (RTSP) and previewed in a browser (WebRTC)
+  # simultaneously.
+  mediamtx:
+    image: bluenviron/mediamtx:latest
+    container_name: fieldpilot_mediamtx
+    environment:
+      MTX_PROTOCOLS: tcp
+      MTX_RTMPADDRESS: ":1935"
+      MTX_RTSPADDRESS: ":8554"
+      MTX_HLSADDRESS: ":8888"
+      MTX_WEBRTCADDRESS: ":8889"
+      # The ingest worker connects from the host, and browsers preview from the
+      # LAN, so these have to be reachable rather than container-internal.
+      MTX_WEBRTCLOCALUDPADDRESS: ":8189"
+    ports:
+      - "1935:1935"     # RTMP publish  <- phone / glasses / OBS
+      - "8554:8554"     # RTSP pull     -> vision pipeline
+      - "8888:8888"     # HLS           -> browser preview
+      - "8889:8889"     # WebRTC        -> low-latency browser preview
+      - "8189:8189/udp" # WebRTC media
+
 volumes:
   postgres_data:
   qdrant_data:
