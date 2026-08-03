@@ -1,0 +1,57 @@
+{
+  "timestamp": "2026-08-03T22:01:28.273728",
+  "frames": 25,
+  "results": {
+    "fp32": {
+      "model": "fp32",
+      "size_mb": 11.81,
+      "provider": "CPUExecutionProvider",
+      "total_p50_ms": 63.79,
+      "total_p95_ms": 71.89,
+      "inference_p50_ms": 56.3,
+      "fps_ceiling": 15.7,
+      "quantization": {
+        "available": true,
+        "scheme": "float",
+        "total_nodes": 405,
+        "DynamicQuantizeLinear": 0,
+        "ConvInteger": 0,
+        "QLinearConv": 0,
+        "QuantizeLinear+DequantizeLinear": 0,
+        "float_Conv": 97
+      }
+    },
+    "int8": {
+      "model": "int8",
+      "size_mb": 3.54,
+      "provider": "CPUExecutionProvider",
+      "total_p50_ms": 104.37,
+      "total_p95_ms": 116.31,
+      "inference_p50_ms": 91.49,
+      "fps_ceiling": 9.6,
+      "quantization": {
+        "available": true,
+        "scheme": "static",
+        "total_nodes": 1285,
+        "DynamicQuantizeLinear": 0,
+        "ConvInteger": 0,
+        "QLinearConv": 0,
+        "QuantizeLinear+DequantizeLinear": 931,
+        "float_Conv": 97
+      }
+    }
+  },
+  "comparison": {
+    "size_reduction_x": 3.34,
+    "speedup_x": 0.61,
+    "detection_count_agreement": 0.56,
+    "fp32_detections": 19,
+    "int8_detections": 0,
+    "mean_iou_of_matched": null,
+    "fp32_boxes_int8_missed": 19,
+    "miss_rate": 1.0,
+    "speed_regression": true,
+    "diagnosis": "static"
+  },
+  "caveat": "Measured on the desktop CPU build of onnxruntime. Phone NPU latency will differ substantially \u2014 re-run on the target device via onnxruntime-react-native before quoting figures."
+}

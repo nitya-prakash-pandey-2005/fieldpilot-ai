@@ -1,0 +1,35 @@
+{
+  "timestamp": "2026-08-03T19:51:37.508199",
+  "frames": 30,
+  "results": {
+    "fp32": {
+      "model": "fp32",
+      "size_mb": 11.81,
+      "provider": "CPUExecutionProvider",
+      "total_p50_ms": 58.85,
+      "total_p95_ms": 85.49,
+      "inference_p50_ms": 48.81,
+      "fps_ceiling": 17.0
+    },
+    "int8": {
+      "model": "int8",
+      "size_mb": 3.41,
+      "provider": "CPUExecutionProvider",
+      "total_p50_ms": 560.96,
+      "total_p95_ms": 593.41,
+      "inference_p50_ms": 554.64,
+      "fps_ceiling": 1.8
+    }
+  },
+  "comparison": {
+    "size_reduction_x": 3.46,
+    "speedup_x": 0.1,
+    "detection_count_agreement": 1.0,
+    "fp32_detections": 24,
+    "int8_detections": 24,
+    "mean_iou_of_matched": 0.9692,
+    "fp32_boxes_int8_missed": 0,
+    "miss_rate": 0.0
+  },
+  "caveat": "Measured on the desktop CPU build of onnxruntime. Phone NPU latency will differ substantially \u2014 re-run on the target device via onnxruntime-react-native before quoting figures."
+}
