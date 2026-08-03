@@ -8,7 +8,7 @@ sys.path.append(root_dir)
 sys.path.append(api_dir)
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from routes import knowledge_graph, drawing_intelligence, vision, measurement, compliance, predictive_rfi, memory, version_control, notification, learning, health, voice, zones, issues, planning, live_feed, auth, interactions
+from routes import knowledge_graph, drawing_intelligence, vision, measurement, compliance, predictive_rfi, memory, version_control, notification, learning, health, voice, zones, issues, planning, live_feed, auth, interactions, rfi_draft
 import os
 
 from contextlib import asynccontextmanager
@@ -113,6 +113,7 @@ app.include_router(issues.router)
 app.include_router(planning.router)
 app.include_router(live_feed.router)
 app.include_router(interactions.router)
+app.include_router(rfi_draft.router)
 
 from datetime import datetime
 

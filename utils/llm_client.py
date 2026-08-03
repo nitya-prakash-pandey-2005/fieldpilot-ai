@@ -10,10 +10,26 @@ LLM_BACKEND = os.getenv("LLM_BACKEND", "mock")
 LLM_BASE_URL = os.getenv("LLM_BASE_URL", "http://localhost:8000/v1")
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
 
-def get_llm_response(system_prompt: str, user_prompt: str, temperature: float = 0.2, api_key: str = None, zone_id: str = "A12") -> str:
+def get_llm_response(system_prompt: str, user_prompt: str, temperature: float = 0.2,
+                     api_key: str = None, zone_id: str = "A12",
+                     json_mode: bool = True) -> str:
     """
     Unified LLM Client handling gemini, mock, vllm, and groq backends with graceful fallbacks.
-    Returns JSON string (expected by predictors).
+
+    json_mode=True (the default, preserving the behaviour every existing caller
+    relies on) forces structured JSON output — correct for the predictors that
+    parse the result.
+
+    json_mode=False is required by callers that want PROSE. Every backend below
+    previously hardcoded JSON output, so a caller asking for an RFI body or a
+    spoken answer got a JSON object back and had to discard it; Agent 6's RFI
+    drafter was silently falling through to its template on every single call
+    because of this.
+
+    Note the fallback asymmetry: on failure the groq/vllm branches return an
+    RFI-shaped mock, which is only meaningful to the RFI predictor. Prose
+    callers must therefore validate what they get back rather than trusting it
+    (rfi_draft.py rejects a response that starts with '{').
     """
     if api_key:
         try:
@@ -25,7 +41,7 @@ def get_llm_response(system_prompt: str, user_prompt: str, temperature: float = 
                 ],
                 "generationConfig": {
                     "temperature": temperature,
-                    "responseMimeType": "application/json"
+                    **({"responseMimeType": "application/json"} if json_mode else {}),
                 }
             }
             resp = requests.post(url, headers=headers, json=data, timeout=30)
@@ -60,7 +76,7 @@ def get_llm_response(system_prompt: str, user_prompt: str, temperature: float = 
                     {"role": "user", "content": user_prompt}
                 ],
                 "temperature": temperature,
-                "response_format": {"type": "json_object"}
+                **({"response_format": {"type": "json_object"}} if json_mode else {}),
             }
             resp = requests.post("https://api.groq.com/openai/v1/chat/completions", headers=headers, json=data, timeout=10)
             resp.raise_for_status()
