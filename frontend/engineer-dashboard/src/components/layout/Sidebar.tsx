@@ -48,6 +48,8 @@ export function Sidebar() {
     { icon: "🏗", label: "Command Center", href: "/", badge: null, roles: ["worker", "engineer", "pm", "admin", "executive"] },
     { icon: "📈", label: "Executive Summary", href: "/executive", badge: null, roles: ["pm", "admin", "executive"] },
     { icon: "🥽", label: "Glasses Feed", href: "/glasses", badge: "LIVE", roles: ["worker", "engineer", "pm", "admin"] },
+    { icon: "📱", label: "Worker View", href: "/worker", badge: "PHONE", roles: ["worker", "engineer", "pm", "admin"] },
+    { icon: "🧠", label: "Agent Flow", href: "/architecture", badge: null, roles: ["engineer", "pm", "admin", "executive"] },
     { icon: "🗺", label: "Site Zones", href: "/zones", badge: atRiskCount, roles: ["engineer", "pm", "admin", "executive"] },
     { icon: "⚠️", label: "Active Issues", href: "/issues", badge: activeIssuesCount, roles: ["engineer", "pm", "admin", "executive"] },
     { icon: "🔮", label: "RFI Predictions", href: "/rfis", badge: "AI", roles: ["engineer", "pm", "admin", "executive"] },
