@@ -1,0 +1,89 @@
+# Strong weights on a GPU. This is the recommended configuration for real work
+# and the one to use on Colab / Kaggle.
+#
+#   pip install "measurecv[models]" timm mmengine
+#   measurecv measure photo.jpg -c configs/gpu.yaml
+#
+# Download budget (cached after the first run):
+#   RT-DETRv2 r101vd        307 MB
+#   SAM 2.1 hiera-large     898 MB
+#   Metric3D ViT-Large     1648 MB
+#   ------------------------------
+#   total                 ~2.9 GB
+#
+# VRAM: comfortably under 8 GB in bf16/fp16, so it fits a free Colab T4 (16 GB)
+# or a Kaggle P100/T4 with room to spare. Expect ~0.5-1.5 s per frame.
+#
+# Why not ViT-giant2 here: it is 5.5 GB of weights for a modest accuracy gain,
+# and on a T4 the extra memory pressure costs more throughput than the accuracy
+# is worth. Use configs/high_accuracy.yaml when accuracy genuinely dominates.
+
+log_level: INFO
+
+detection:
+  backend: transformers
+  model_id: PekingU/rtdetr_v2_r101vd    # strongest RT-DETRv2 backbone
+  score_threshold: 0.45
+  max_detections: 100
+  min_box_area_px: 256
+  # Worth enabling once you are processing more than a handful of frames:
+  # compilation costs ~1 min up front and pays back over a batch.
+  compile_model: false
+
+segmentation:
+  backend: transformers
+  model_id: facebook/sam2.1-hiera-large  # best mask boundaries
+  multimask_output: true
+  use_point_prompt: true
+  fill_holes_px: 512
+  remove_specks_px: 128
+
+depth:
+  backend: torch_hub
+  model_name: metric3d_vit_large
+  scale_uncertainty: 0.05                # ViT-Large zero-shot AbsRel
+
+calibration:
+  # Supply a profile from `measurecv calibrate` to go from ~15% to ~1-2% on
+  # absolute scale. Nothing else in this file matters as much.
+  profile: null
+  allow_exif: true
+  default_hfov_deg: 60.0
+  undistort: true
+
+measurement:
+  mask_erode_px: 3
+  depth_edge_suppression: true
+  statistical_outlier_k: 16
+  min_points: 200
+  max_points: 40000
+
+  estimate_ground_plane: true
+  ground_ransac_iterations: 1000
+  ground_distance_threshold_m: 0.015
+  gravity_prior_deg: 30.0
+
+  dimension_method: auto
+  volume_method: auto
+  obb_percentile: 1.0
+  surface_area_correction: true
+  monte_carlo_samples: 0                 # raise to 256+ for publication-grade error bars
+  reject_truncated: true
+
+tracking:
+  enabled: true
+  max_age: 30
+  min_hits: 3
+  high_threshold: 0.6
+  smoothing: ema
+  smoothing_alpha: 0.35
+
+runtime:
+  device: cuda
+  precision: auto                        # bf16 on Ampere+, fp16 otherwise
+  max_image_side: 1600
+  detect_every_n_frames: 1
+  warmup: true
+
+api:
+  max_concurrent_inferences: 2

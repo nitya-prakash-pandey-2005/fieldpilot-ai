@@ -13,6 +13,32 @@ if _API_DIR not in sys.path:
     sys.path.append(_API_DIR)
 
 
+# Working hours for one RFI cycle, used to derive "hours saved". The industry
+# figure is 6-10 working days of calendar latency (system_prompt.md §2.1); 7.2h
+# is the working-hours equivalent the ROI panel already uses, kept identical
+# here so the two never quote different arithmetic for the same claim.
+BASELINE_RFI_CYCLE_HOURS = float(os.getenv("BASELINE_RFI_CYCLE_HOURS", "7.2"))
+
+
+def _as_dict(raw) -> Dict[str, Any]:
+    """resolution / outcome_metrics are JSON stored as text (sqlite compat)."""
+    if isinstance(raw, dict):
+        return raw
+    try:
+        parsed = json.loads(raw or "{}")
+    except (TypeError, ValueError):
+        return {}
+    return parsed if isinstance(parsed, dict) else {}
+
+
+def _resolution_of(inc: Dict[str, Any]) -> Dict[str, Any]:
+    return _as_dict(inc.get("resolution"))
+
+
+def _outcome_of(inc: Dict[str, Any]) -> Dict[str, Any]:
+    return _as_dict(inc.get("outcome_metrics"))
+
+
 class DatasetExporter:
     """
     Reads from the unified `fieldpilot` Postgres DB/ORM (models.resolved_incident.
@@ -134,6 +160,27 @@ class DatasetExporter:
         avg_time = (total_time / total) if total > 0 else 0
         most_common_cause = max(root_causes.items(), key=lambda x: x[1])[0] if root_causes else "unknown"
 
+        # `rfis_avoided` and `time_saved_hours` used to be absent from this
+        # payload entirely. The dashboard asked for them anyway and silently fell
+        # back to the pitch deck's illustrative figures (23 RFIs, 340 hours), so
+        # two fabricated tiles sat next to two measured ones looking identical.
+        #
+        # They are computed here instead, and the assumption each one rests on
+        # travels with it. A derived metric is fine; a derived metric whose
+        # baseline is invisible is not, because the reader cannot tell an
+        # measurement from an extrapolation.
+        rfis_avoided = sum(
+            1 for inc in incidents
+            if not _resolution_of(inc).get("rework_required", True)
+        )
+        saved = 0.0
+        for inc in incidents:
+            res = _resolution_of(inc)
+            if res.get("rework_required", True):
+                continue
+            actual = float(res.get("time_to_resolve_hours", 0) or 0)
+            saved += max(BASELINE_RFI_CYCLE_HOURS - actual, 0.0)
+
         return {
             "total_incidents_learned": total,
             "by_issue_type": by_issue_type,
@@ -141,9 +188,79 @@ class DatasetExporter:
             "avg_resolution_time_hours": round(avg_time, 2),
             "rework_prevented_count": rework_prevented,
             "total_cost_avoided_usd": int(total_cost_usd),
+            "rfis_avoided": rfis_avoided,
+            "time_saved_hours": int(round(saved)),
             "most_common_root_cause": most_common_cause,
             "dataset_ready_for_export": total > 0,
-            "jsonl_pairs_available": total * 3
+            "jsonl_pairs_available": total * 3,
+            "trend": await self.get_period_trend(),
+            "definitions": {
+                "rfis_avoided": "Resolved incidents closed without rework — each was "
+                                "settled in the field rather than becoming a formal RFI.",
+                "time_saved_hours": f"Sum of ({BASELINE_RFI_CYCLE_HOURS}h baseline RFI "
+                                    "cycle − actual resolution time) over those incidents.",
+                "total_cost_avoided_usd": "Sum of cost_avoided_usd recorded on each incident.",
+                "rework_prevented_count": "Resolved incidents whose resolution recorded no rework.",
+            },
+            "assumptions": {
+                "baseline_rfi_cycle_hours": BASELINE_RFI_CYCLE_HOURS,
+                "source": "Industry RFI response time of 6-10 working days (system_prompt.md "
+                          "§2.1); 7.2h is the working-hours figure also used by the ROI panel.",
+            },
+        }
+
+    async def get_period_trend(self, days: int = 30) -> dict:
+        """Real period-over-period change: last N days vs the N before that.
+
+        Returns nulls rather than zeros when there is no prior period to compare
+        against. The dashboard previously rendered "+23% vs last month" as a
+        hardcoded string on every tile regardless of the data, which is a claim
+        about a trend nobody measured.
+        """
+        from datetime import datetime, timedelta, timezone
+
+        incidents = await self._get_all_incidents()
+        now = datetime.now(timezone.utc)
+        cur_start = now - timedelta(days=days)
+        prev_start = now - timedelta(days=days * 2)
+
+        cur = {"incidents": 0, "cost": 0.0}
+        prev = {"incidents": 0, "cost": 0.0}
+
+        for inc in incidents:
+            created = inc.get("created_at")
+            if isinstance(created, str):
+                try:
+                    created = datetime.fromisoformat(created.replace("Z", "+00:00"))
+                except ValueError:
+                    continue
+            if not created:
+                continue
+            if created.tzinfo is None:
+                created = created.replace(tzinfo=timezone.utc)
+
+            out = _outcome_of(inc)
+            cost = float(out.get("cost_avoided_usd", out.get("cost_avoided", 0)) or 0)
+
+            if created >= cur_start:
+                cur["incidents"] += 1
+                cur["cost"] += cost
+            elif created >= prev_start:
+                prev["incidents"] += 1
+                prev["cost"] += cost
+
+        def pct(a: float, b: float):
+            if b == 0:
+                return None            # no prior period — say so, do not print +100%
+            return round((a - b) / b * 100.0, 1)
+
+        return {
+            "window_days": days,
+            "current": {"incidents": cur["incidents"], "cost_usd": int(cur["cost"])},
+            "previous": {"incidents": prev["incidents"], "cost_usd": int(prev["cost"])},
+            "incidents_pct_change": pct(cur["incidents"], prev["incidents"]),
+            "cost_pct_change": pct(cur["cost"], prev["cost"]),
+            "comparable": prev["incidents"] > 0,
         }
 
     async def get_trends(self, days: int = 30) -> List[Dict[str, Any]]:

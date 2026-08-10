@@ -11,8 +11,15 @@ dist/
 downloads/
 eggs/
 .eggs/
-lib/
-lib64/
+# Anchored to the repo root. These come from the standard Python .gitignore,
+# where they mean a build-time lib/ directory beside setup.py -- but unanchored,
+# `lib/` also matches frontend/engineer-dashboard/src/lib/, which holds api.ts
+# (apiBase(), imported by nearly every dashboard component) and
+# visionAnalysis.ts. Both were silently excluded from every commit, so a fresh
+# clone would fail to build with a missing-module error pointing at a file the
+# author can see on disk.
+/lib/
+/lib64/
 parts/
 sdist/
 var/
@@ -64,6 +71,25 @@ data/offline_queue.db
 api/fieldpilot.db
 *.sqlite
 *.sqlite3
+
+# Embedded Qdrant store, used when no Qdrant container is running. Rebuilt by
+# re-running scripts/ingest_spec.py; it holds indexed PDF chunks and their
+# embeddings, which are derived data and tens of megabytes of it.
+data/qdrant_local/
+
+# Kokoro TTS weights — 310MB and 26MB. GitHub hard-rejects any blob over 100MB,
+# so committing the first one does not merely bloat the repo, it makes the push
+# fail. Both are downloaded on demand; see the README's Cloud vs Edge section
+# for the two curl commands that fetch them.
+models/weights/kokoro-v1.0.onnx
+models/weights/voices-v1.0.bin
+
+# cloudflared binary, downloaded per-platform to expose the dashboard over HTTPS
+# so a phone will grant camera/microphone access. Fetch the build for your OS
+# from github.com/cloudflare/cloudflared/releases rather than committing 51MB.
+cloudflared-win.exe
+tunnel.out
+tunnel.err
 
 # Trained weights and datasets are large and regenerable — see
 # docs/TRAINING_PLAN.md for how to rebuild them.

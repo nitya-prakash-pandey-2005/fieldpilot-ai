@@ -9,6 +9,7 @@ import { GlassesFeedPanel } from '@/components/dashboard/GlassesFeedPanel';
 import { TranscriptPanel } from '@/components/dashboard/TranscriptPanel';
 import { ObservationPanel } from '@/components/dashboard/ObservationPanel';
 import { LiveCameraPanel } from '@/components/dashboard/LiveCameraPanel';
+import { DimensioningPanel } from '@/components/dashboard/DimensioningPanel';
 import { analyzeSceneReal } from '@/lib/visionAnalysis';
 import { apiBase } from '@/lib/api';
 
@@ -183,9 +184,30 @@ export default function GlassesPage() {
 
       <div className="flex items-center justify-between bg-[var(--bg-surface)]/75 backdrop-blur-[20px] rounded-xl border border-[var(--border-subtle)] p-4 shrink-0">
         <div className="flex items-center gap-6">
-          <div className="flex items-center gap-3">
-            <h1 className="text-xl font-bold tracking-tight text-[var(--text-primary)] font-display uppercase">Meta Glasses Stream</h1>
-            <LiveIndicator isLive={true} />
+          {/* The team has no Meta glasses. Follow.md §3 requires that
+              substitution be obvious and intentional in the UI rather than
+              hidden, so the title says what is actually feeding the pipeline —
+              a device camera — instead of naming hardware that is not here. */}
+          <div className="flex flex-col">
+            <div className="flex items-center gap-3">
+              <h1 className="text-xl font-bold tracking-tight text-[var(--text-primary)] font-display uppercase">
+                Glasses Mode
+              </h1>
+              <span
+                className="text-[10px] font-bold tracking-wider px-2 py-0.5 rounded"
+                style={{
+                  color: 'var(--amber)',
+                  background: 'color-mix(in srgb, var(--amber) 14%, transparent)',
+                  border: '1px solid color-mix(in srgb, var(--amber) 40%, transparent)',
+                }}
+              >
+                SIMULATED VIA DEVICE CAMERA
+              </span>
+              <LiveIndicator isLive={mode === 'live'} />
+            </div>
+            <span className="text-[10px] text-[var(--text-muted)] mt-0.5">
+              No Meta hardware in the loop — the laptop/phone camera stands in for the glasses.
+            </span>
           </div>
 
           {/* MODE TOGGLE */}
@@ -312,12 +334,41 @@ export default function GlassesPage() {
               {cameraSource === 'phone' ? ` --phone-ip ${phoneIp}` : ''}
             </div>
           )}
+
+          {/* Agent 2's dimensioning path. Deliberately a separate, explicit
+              capture rather than something the live loop runs per-frame: a
+              full RT-DETR + SAM 2 + Metric3D pass is ~20-30s on CPU, so
+              driving it from the video stream would queue frames forever. */}
+          <DimensioningPanel className="mt-4" />
         </div>
       )}
 
       {/* Demo Mode */}
       {mode === 'demo' && (
         <div className="grid grid-cols-1 lg:grid-cols-3 xl:grid-cols-4 gap-4 flex-1">
+
+          {/* Follow.md §11: a stub must be visibly labelled, not disguised. The
+              values in SCENARIOS (152mm, 97%, 2.3s) are fixed illustrative
+              figures, not model output. The mode toggle alone was too easy to
+              miss once a scenario card filled the screen with numbers that look
+              exactly like measured ones. */}
+          <div className="lg:col-span-3 xl:col-span-4 flex items-center gap-3 px-4 py-2.5 rounded-lg"
+               style={{
+                 background: 'color-mix(in srgb, var(--amber) 10%, transparent)',
+                 border: '1px solid color-mix(in srgb, var(--amber) 35%, transparent)',
+               }}>
+            <span className="text-[10px] font-bold tracking-wider px-2 py-0.5 rounded shrink-0"
+                  style={{ color: '#000', background: 'var(--amber)' }}>
+              SIMULATED
+            </span>
+            <p className="text-xs text-[var(--text-secondary)]">
+              These scenarios replay fixed, pre-written figures to walk through the workflow.
+              Nothing here is measured. Switch to <strong className="text-[var(--text-primary)]">Live Camera</strong> for
+              real detection and measurement, or open <strong className="text-[var(--text-primary)]">Agent Flow</strong> to
+              watch all ten agents run on a frame you capture.
+            </p>
+          </div>
+
           
           {/* Main Feed */}
           <div className="lg:col-span-2 xl:col-span-3 flex flex-col h-[80vh]">

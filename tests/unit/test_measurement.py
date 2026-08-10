@@ -25,7 +25,14 @@ import numpy as np
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 
 # Keep these tests hermetic and fast: no model downloads, ArUco path only.
+#
+# Best-effort only. Both backends read these at module import, so they take
+# effect just when this file is imported before the backend is — true when this
+# file runs alone, not guaranteed in a full-suite run. Any test whose CORRECTNESS
+# depends on a provider being absent must stub that provider itself; these two
+# lines are here to keep the suite fast, not to establish a precondition.
 os.environ.setdefault("DEPTH_ENABLED", "0")
+os.environ.setdefault("MEASURECV_ENABLED", "0")
 
 from agents.measurement.calibration import ArucoCalibrator, calibrate_from_reference
 from agents.measurement.estimator import MeasurementEngine
@@ -242,10 +249,26 @@ def test_engine_refuses_when_uncalibrated():
     The previous implementation returned a confident number here. Returning
     nothing is correct — Agent 5 escalates to STOP WORK on a FAIL, so a
     fabricated measurement becomes a fabricated work stoppage.
+
+    Both depth providers are stubbed out explicitly rather than relying on the
+    DEPTH_ENABLED / MEASURECV_ENABLED environment variables. Those are read at
+    module import, so whether they take effect depends on which test file
+    imported the backend first — which made this test pass alone and fail in a
+    full run. The precondition belongs in the test, not in import order.
     """
-    engine = MeasurementEngine()
-    img = build_grid_scene(with_marker=False)
-    out = engine.measure(img, measurement_type="spacing")
+    from agents.measurement import depth as _depth
+    from agents.measurement import measurecv_backend as _mcv
+
+    real_dav2, real_metric3d = _depth.estimate_depth, _mcv.estimate_metric_depth
+    _depth.estimate_depth = lambda *a, **k: None
+    _mcv.estimate_metric_depth = lambda *a, **k: None
+    try:
+        engine = MeasurementEngine()
+        img = build_grid_scene(with_marker=False)
+        out = engine.measure(img, measurement_type="spacing")
+    finally:
+        _depth.estimate_depth = real_dav2
+        _mcv.estimate_metric_depth = real_metric3d
 
     assert out["status"] == "uncalibrated", f"expected refusal, got {out['status']}"
     assert out["measurements"] == []

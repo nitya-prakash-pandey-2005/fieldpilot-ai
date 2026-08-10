@@ -8,7 +8,7 @@ sys.path.append(root_dir)
 sys.path.append(api_dir)
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from routes import knowledge_graph, drawing_intelligence, vision, measurement, compliance, predictive_rfi, memory, version_control, notification, learning, health, voice, zones, issues, planning, live_feed, auth, interactions, rfi_draft, localization, stream, edge
+from routes import knowledge_graph, drawing_intelligence, vision, measurement, compliance, predictive_rfi, memory, version_control, notification, learning, health, voice, zones, issues, planning, live_feed, auth, interactions, rfi_draft, localization, stream, edge, orchestrator, worker
 import os
 
 from contextlib import asynccontextmanager
@@ -65,17 +65,35 @@ async def lifespan(app: FastAPI):
             ])
             await session.commit()
             
-        result_issues = await session.execute(select(FieldIssue))
-        if len(result_issues.scalars().all()) == 0:
-            now = datetime.utcnow()
-            session.add_all([
-                FieldIssue(id="issue-1", project_id="default-project", zone_id="z-1", zone_code="A12", issue_type="Rebar Grid", severity="critical", description="Rebar spacing is 190mm. Specification requires 150mm ±10mm. Deviation is 40mm above maximum. STOP WORK.", deviation_pct=26.6, measured_value="190mm", expected_value="150mm", worker_id="W-022", created_at=now - timedelta(hours=3)),
-                FieldIssue(id="issue-2", project_id="default-project", zone_id="z-2", zone_code="B3", issue_type="Conduit Routing", severity="high", description="Worker using outdated drawing S-101-R3. Latest approved is R5 (Nov 2, 2024). R5 changes conduit routing in this zone.", deviation_pct=12.0, measured_value="Drawing R3", expected_value="Drawing R5", worker_id="W-015", created_at=now - timedelta(hours=3, minutes=6)),
-                FieldIssue(id="issue-3", project_id="default-project", zone_id="z-3", zone_code="C7", issue_type="HVAC Duct", severity="medium", description="Clearance height is 2.85m. Minimum clearance per spec is 3.00m. Warning generated.", deviation_pct=8.5, measured_value="2.85m", expected_value="3.00m", worker_id="W-088", created_at=now - timedelta(hours=3, minutes=43)),
-                FieldIssue(id="issue-4", project_id="default-project", zone_id="z-1", zone_code="A12", issue_type="Concrete Formwork", severity="high", description="Formwork is leaning by 2.3 degrees. Maximum allowable tolerance is 1.0 degree.", deviation_pct=15.0, measured_value="2.3 deg", expected_value="0 deg", worker_id="W-842", created_at=now - timedelta(hours=4, minutes=58)),
-                FieldIssue(id="issue-5", project_id="default-project", zone_id="z-2", zone_code="B3", issue_type="Cable Tray", severity="medium", description="Cable tray offset is 520mm from wall, expected 550mm.", deviation_pct=5.5, measured_value="520mm", expected_value="550mm", worker_id="W-015", created_at=now - timedelta(hours=5, minutes=58))
-            ])
-            await session.commit()
+        # Demo issues are OFF by default.
+        #
+        # These five rows used to be seeded unconditionally, and because
+        # FieldIssue.detected_by defaults to "vision_agent" they arrived in the
+        # Active Issues panel indistinguishable from something the pipeline had
+        # actually measured — "Rebar spacing is 190mm ... STOP WORK", attributed
+        # to worker W-022, on a site nobody had scanned. Anyone clicking around
+        # the dashboard was reading fabricated detections.
+        #
+        # Zones and users above are different in kind and stay: a real project
+        # has a site layout and a user list before anyone inspects anything.
+        # A detection, by definition, only exists once something detected it.
+        #
+        # Set DEMO_SEED_ISSUES=1 to restore them for a screenshot or a pitch;
+        # they are then stamped detected_by="demo_seed", which the dashboard
+        # renders with a SEEDED badge so they can never be mistaken for real.
+        if os.getenv("DEMO_SEED_ISSUES", "0").lower() in ("1", "true", "yes"):
+            result_issues = await session.execute(select(FieldIssue))
+            if len(result_issues.scalars().all()) == 0:
+                now = datetime.utcnow()
+                session.add_all([
+                    FieldIssue(id="issue-1", project_id="default-project", zone_id="z-1", zone_code="A12", issue_type="Rebar Grid", severity="critical", description="Rebar spacing is 190mm. Specification requires 150mm ±10mm. Deviation is 40mm above maximum. STOP WORK.", deviation_pct=26.6, measured_value="190mm", expected_value="150mm", worker_id="W-022", detected_by="demo_seed", created_at=now - timedelta(hours=3)),
+                    FieldIssue(id="issue-2", project_id="default-project", zone_id="z-2", zone_code="B3", issue_type="Conduit Routing", severity="high", description="Worker using outdated drawing S-101-R3. Latest approved is R5 (Nov 2, 2024). R5 changes conduit routing in this zone.", deviation_pct=12.0, measured_value="Drawing R3", expected_value="Drawing R5", worker_id="W-015", detected_by="demo_seed", created_at=now - timedelta(hours=3, minutes=6)),
+                    FieldIssue(id="issue-3", project_id="default-project", zone_id="z-3", zone_code="C7", issue_type="HVAC Duct", severity="medium", description="Clearance height is 2.85m. Minimum clearance per spec is 3.00m. Warning generated.", deviation_pct=8.5, measured_value="2.85m", expected_value="3.00m", worker_id="W-088", detected_by="demo_seed", created_at=now - timedelta(hours=3, minutes=43)),
+                    FieldIssue(id="issue-4", project_id="default-project", zone_id="z-1", zone_code="A12", issue_type="Concrete Formwork", severity="high", description="Formwork is leaning by 2.3 degrees. Maximum allowable tolerance is 1.0 degree.", deviation_pct=15.0, measured_value="2.3 deg", expected_value="0 deg", worker_id="W-842", detected_by="demo_seed", created_at=now - timedelta(hours=4, minutes=58)),
+                    FieldIssue(id="issue-5", project_id="default-project", zone_id="z-2", zone_code="B3", issue_type="Cable Tray", severity="medium", description="Cable tray offset is 520mm from wall, expected 550mm.", deviation_pct=5.5, measured_value="520mm", expected_value="550mm", worker_id="W-015", detected_by="demo_seed", created_at=now - timedelta(hours=5, minutes=58))
+                ])
+                await session.commit()
+                print("[SEED] DEMO_SEED_ISSUES=1 — inserted 5 demo issues, stamped detected_by='demo_seed'")
             
     # Start Scheduler
     from tasks.scoring import start_scheduler
@@ -88,9 +106,63 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="FieldPilot AI API Gateway", version="1.0.0", lifespan=lifespan)
 
+def _lan_origins() -> list[str]:
+    """Every private-LAN address this machine has, on the dashboard ports.
+
+    The worker device is a phone, so the dashboard is opened at
+    http://<laptop-lan-ip>:3000 — an origin the hardcoded localhost list did not
+    contain, and every request from the phone failed CORS before it reached a
+    route. Requiring the operator to hand-edit CORS_ORIGINS with an address that
+    changes whenever the laptop joins a different network is a setup step that
+    silently breaks the demo.
+
+    Scoped deliberately: RFC1918 / link-local ranges only, on the two dashboard
+    ports. It never widens to public addresses, and `allow_credentials=True`
+    means a wildcard here would be genuinely unsafe.
+    """
+    import socket
+    import ipaddress
+
+    origins: list[str] = []
+    try:
+        for info in socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET):
+            ip = info[4][0]
+            try:
+                addr = ipaddress.IPv4Address(ip)
+            except ValueError:
+                continue
+            if not (addr.is_private or addr.is_link_local) or addr.is_loopback:
+                continue
+            for port in (3000, 3001, 8081):
+                origins.append(f"http://{ip}:{port}")
+    except OSError as e:
+        print(f"[CORS] could not enumerate LAN addresses: {e}")
+    return sorted(set(origins))
+
+
+_explicit = os.getenv(
+    "CORS_ORIGINS",
+    "http://localhost:3000,http://127.0.0.1:3000,http://localhost:3001,"
+    "http://localhost:8081,https://fieldpilot-ai-ovzd.vercel.app",
+).split(",")
+_allowed = sorted(set([o.strip() for o in _explicit if o.strip()] + _lan_origins()))
+
+# Opt-in only. A phone needs an HTTPS origin for getUserMedia, and the usual
+# answer is an ephemeral tunnel whose hostname is random per run — impossible to
+# put in a fixed list. Set CORS_ORIGIN_REGEX to allow it, e.g.
+#   CORS_ORIGIN_REGEX=https://.*\.trycloudflare\.com
+# Left unset by default: a regex is easy to write too loosely, and this API
+# allows credentials.
+_origin_regex = os.getenv("CORS_ORIGIN_REGEX") or None
+
+print(f"[CORS] {len(_allowed)} allowed origins"
+      + (f" + regex {_origin_regex}" if _origin_regex else "")
+      + f" — LAN: {', '.join(_lan_origins()) or 'none detected'}")
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=os.getenv("CORS_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000,http://localhost:3001,http://localhost:8081,https://fieldpilot-ai-ovzd.vercel.app").split(","),
+    allow_origins=_allowed,
+    allow_origin_regex=_origin_regex,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -118,6 +190,8 @@ app.include_router(rfi_draft.router)
 app.include_router(localization.router)
 app.include_router(stream.router)
 app.include_router(edge.router)
+app.include_router(orchestrator.router)
+app.include_router(worker.router)
 
 from datetime import datetime
 

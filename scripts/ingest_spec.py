@@ -60,7 +60,46 @@ def download_and_ingest_pdf(doc: dict, api_base: str):
         print(f"  Error: {res.status_code} - {res.text}")
 
 
+def ingest_project_documents(api_base: str):
+    """Index the demo project's own drawings, RFIs and change orders.
+
+    Retrieval over OSHA publications alone cannot answer a rebar-spacing
+    question — those are safety publications and contain no dimensional
+    tolerances, so Agent 7 correctly returned nothing and Agent 6 drafted
+    uncited RFIs. A real project's document set is what carries that
+    information, so the corpus needs both.
+
+    These records are synthetic (see data/project_documents.json). Each one's
+    `source` is suffixed "(demo project record)" before indexing, so the
+    distinction between invented project paperwork and genuine public-domain
+    standard text survives into every citation an engineer sees.
+    """
+    import json
+
+    path = os.path.join(os.path.dirname(__file__), "..", "data", "project_documents.json")
+    if not os.path.exists(path):
+        print(f"No project document set at {path} — skipping.")
+        return
+
+    with open(path, "r", encoding="utf-8") as fh:
+        docs = json.load(fh).get("documents", [])
+
+    print(f"\nIndexing {len(docs)} project records...")
+    for doc in docs:
+        res = requests.post(
+            f"{api_base}/api/v1/drawing/index",
+            json={"document_id": doc["id"], "text_chunks": [doc["text"]],
+                  "source": doc["source"], "project_id": "default-project"},
+            timeout=120,
+        )
+        if res.status_code == 200:
+            print(f"  {doc['id']}: {res.json().get('indexed_chunks')} chunk(s) — {doc['source']}")
+        else:
+            print(f"  {doc['id']}: error {res.status_code} - {res.text[:120]}")
+
+
 if __name__ == "__main__":
     api_base = os.getenv("API_BASE_URL", "http://localhost:8000")
     for doc in DOCUMENTS:
         download_and_ingest_pdf(doc, api_base)
+    ingest_project_documents(api_base)

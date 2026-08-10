@@ -1,0 +1,62 @@
+# Real weights, CPU-only. The smallest variant of each model, chosen so the
+# full stack fits in ~1 GB of RAM and runs without a GPU.
+#
+#   pip install "measurecv[models]" timm mmengine
+#   measurecv measure photo.jpg -c configs/cpu.yaml
+#
+# Expect roughly 10-25 s per frame on a modern laptop CPU. This is a
+# correctness and evaluation configuration, not a throughput one -- for live
+# use you want a GPU and configs/realtime.yaml.
+#
+# Metric3D notes for CPU users (both handled automatically by the backend):
+#   * Its hub script imports `mmcv` but never calls it; `mmengine` is shimmed
+#     in so you do not need OpenMMLab's compiled package.
+#   * Its decode head allocates tensors with a hardcoded device="cuda", which
+#     is remapped to the active device. Same numbers, no GPU required.
+
+log_level: INFO
+
+detection:
+  backend: transformers
+  model_id: PekingU/rtdetr_v2_r18vd    # 20M params
+  score_threshold: 0.5
+  max_detections: 20
+  min_box_area_px: 900                 # skip objects too small to measure well
+
+segmentation:
+  backend: transformers
+  model_id: facebook/sam2.1-hiera-tiny  # 31M params
+  multimask_output: true
+  use_point_prompt: true
+
+depth:
+  backend: torch_hub
+  model_name: metric3d_vit_small
+  # The small model is less accurate than vit_large, and the error bars say so.
+  scale_uncertainty: 0.08
+
+calibration:
+  # Supply a real profile to escape the ~15% assumed-FOV scale error.
+  profile: null
+  allow_exif: true
+  default_hfov_deg: 60.0
+
+measurement:
+  mask_erode_px: 3
+  min_points: 100
+  max_points: 12000
+  estimate_ground_plane: true
+  volume_method: auto
+
+tracking:
+  enabled: true
+  high_threshold: 0.6
+
+runtime:
+  device: cpu
+  precision: fp32                      # half precision is slower on CPU, not faster
+  max_image_side: 960                  # the dominant cost lever on CPU
+  warmup: false                        # skip: a warmup pass costs a full frame
+
+api:
+  max_concurrent_inferences: 1

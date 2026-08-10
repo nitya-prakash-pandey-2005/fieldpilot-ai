@@ -183,7 +183,8 @@ class LearningIngestor:
 
         def _embed_and_upsert():
             model = _get_incident_embedder()
-            client = QdrantClient(url=os.getenv("QDRANT_URL", "http://localhost:6333"), timeout=float(os.getenv("QDRANT_TIMEOUT", "2.0")))
+            from utils.qdrant_config import get_client
+            client = get_client()   # shared: embedded mode allows only one
             try:
                 collections = client.get_collections().collections
                 if not any(c.name == QDRANT_COLLECTION for c in collections):

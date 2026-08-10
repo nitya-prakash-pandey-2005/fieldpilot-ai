@@ -24,6 +24,10 @@ export interface ComplianceIssue {
   worker_id: string | null;
   status: string;
   created_at: string;
+  /** Which agent (or fixture) produced this row. "demo_seed" renders a SEEDED
+   *  badge — seeded rows carry real-looking measurements that nothing measured,
+   *  so they must never be visually interchangeable with detections. */
+  detected_by?: string | null;
 }
 
 function confidenceColor(c: number) {
@@ -69,6 +73,15 @@ export function ComplianceCard({
           <span className="text-xs font-mono font-semibold text-[var(--text-primary)]">
             {issue.asset_id || issue.id.slice(0, 8)}
           </span>
+          {issue.detected_by === 'demo_seed' && (
+            <span
+              className="text-[9px] font-bold tracking-wider px-1.5 py-0.5 rounded shrink-0"
+              style={{ color: '#000', background: 'var(--amber)' }}
+              title="Fixture row, not a detection. Nothing measured these values."
+            >
+              SEEDED
+            </span>
+          )}
         </div>
         {timeAgo && <span className="text-[10px] text-[var(--text-muted)] font-mono">{timeAgo}</span>}
       </div>

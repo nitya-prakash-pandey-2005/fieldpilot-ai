@@ -1,0 +1,50 @@
+{
+  "_note": [
+    "Project specification registry — the values Agent 3 validates measurements against.",
+    "",
+    "PROVENANCE: these entries are not invented for this file. They are the spec",
+    "values already used elsewhere in this repo, consolidated into one canonical",
+    "place so the compliance agent reads a stored spec rather than receiving one",
+    "inline from whoever calls it. The rebar entry is the same 150mm +/-10mm",
+    "figure seeded into the RAG corpus and the ComplianceEvent rows by",
+    "scripts/seed_demo_data.py.",
+    "",
+    "standard_ref is the governing document AS RECORDED ON THE PROJECT. Agent 7",
+    "retrieves the actual clause text from the ingested PDFs at validation time;",
+    "this field is a pointer, not a substitute for that retrieval.",
+    "",
+    "If no entry matches, Agent 3 returns status 'no_spec' and declines to issue a",
+    "verdict. It never falls back to a default tolerance -- a made-up tolerance",
+    "produces a real-looking PASS/FAIL on nothing."
+  ],
+  "specs": [
+    {
+      "spec_id": "SPEC-REBAR-A12",
+      "parameter": "spacing",
+      "applies_to": {
+        "zone_ids": ["A12"],
+        "asset_types": ["rebar"]
+      },
+      "expected_value": 150.0,
+      "tolerance_min": 140.0,
+      "tolerance_max": 160.0,
+      "unit": "mm",
+      "standard_ref": "ACI 318-19 Sec. 7.7.1 / Drawing S-101 Rev 5",
+      "description": "Rebar spacing 150mm centre-to-centre, tolerance +/-10mm."
+    },
+    {
+      "spec_id": "SPEC-REBAR-DEFAULT",
+      "parameter": "spacing",
+      "applies_to": {
+        "zone_ids": ["*"],
+        "asset_types": ["*"]
+      },
+      "expected_value": 150.0,
+      "tolerance_min": 140.0,
+      "tolerance_max": 160.0,
+      "unit": "mm",
+      "standard_ref": "ACI 318-19 Sec. 7.7.1 / Drawing S-101 Rev 5",
+      "description": "Project-wide default rebar spacing where no zone-specific schedule exists."
+    }
+  ]
+}

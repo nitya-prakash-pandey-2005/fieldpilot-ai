@@ -198,7 +198,13 @@ class EdgeDetector:
                  conf_threshold: float = DEFAULT_CONF,
                  iou_threshold: float = DEFAULT_IOU,
                  providers: Optional[list[str]] = None):
-        self.model_path = model_path
+        # Resolve against the repo root, not the process working directory. The
+        # API is started from api/, so a relative default resolved to
+        # api/models/weights/... and the detector reported "model not found"
+        # while the file sat where it was supposed to. The failure looked like a
+        # missing export rather than a path bug, and Edge mode appeared broken.
+        self.model_path = model_path if os.path.isabs(model_path) else os.path.join(
+            os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")), model_path)
         self.input_size = input_size
         self.conf_threshold = conf_threshold
         self.iou_threshold = iou_threshold

@@ -1,0 +1,88 @@
+# Maximum accuracy. Roughly 3-4x slower than default; use for offline
+# metrology, quality inspection, or anything where the number matters more
+# than the frame rate.
+#
+#   measurecv measure crate.jpg -c configs/high_accuracy.yaml \
+#       --calibration my_camera.json
+#
+# Download budget (cached after the first run):
+#   RT-DETRv2 r101vd         307 MB
+#   SAM 2.1 hiera-large      898 MB
+#   Metric3D ViT-giant2     5511 MB   <-- the big one
+#   -------------------------------
+#   total                   ~6.7 GB
+#
+# VRAM: ~12 GB in fp32. On a 16 GB card (Colab T4, Kaggle P100) this fits but
+# leaves little headroom -- drop runtime.precision to `auto` for bf16/fp16 if
+# you hit an OOM, or use configs/gpu.yaml, which trades ViT-giant2 for
+# ViT-Large and is markedly faster for a small accuracy cost.
+
+log_level: INFO
+
+detection:
+  model_id: PekingU/rtdetr_v2_r101vd   # largest RT-DETRv2 backbone
+  score_threshold: 0.35                # recall over precision; filters catch the rest
+  max_detections: 300
+
+segmentation:
+  model_id: facebook/sam2.1-hiera-large
+  multimask_output: true
+  use_point_prompt: true
+  # Tighter cleanup: at this accuracy level a 64 px speck is a real error.
+  fill_holes_px: 512
+  remove_specks_px: 128
+
+depth:
+  model_name: metric3d_vit_giant2      # best zero-shot metric accuracy
+  scale_uncertainty: 0.04
+
+calibration:
+  # Strongly recommended to supply a real profile here; an assumed FOV puts a
+  # ~15% floor under the error bar that no amount of processing can remove.
+  profile: null
+  undistort: true
+  max_rms_error_px: 0.5                # reject mediocre calibrations
+
+measurement:
+  # More aggressive edge rejection. The boundary-shrink compensation makes
+  # this nearly free in accuracy terms -- it costs samples, not correctness.
+  mask_erode_px: 4
+  depth_edge_threshold: 0.04
+  outlier_mad_scale: 2.5
+  statistical_outlier_k: 24
+  statistical_outlier_std: 1.8
+  min_points: 400
+  max_points: 60000
+
+  estimate_ground_plane: true
+  ground_ransac_iterations: 2000
+  ground_distance_threshold_m: 0.012
+  gravity_prior_deg: 25.0
+
+  dimension_method: auto
+  volume_method: auto
+  obb_percentile: 0.5
+  surface_area_correction: true
+
+  # Monte Carlo error propagation. First-order propagation is exact for the
+  # lateral relations but approximate for hull and rectangle fits; sampling
+  # captures their nonlinearity. Real cost -- 512 refits per object.
+  monte_carlo_samples: 512
+
+  reject_truncated: true
+  min_confidence: 0.25                 # suppress results we cannot stand behind
+
+tracking:
+  enabled: true
+  min_hits: 5
+  smoothing: median                    # rejects spikes outright
+  smoothing_window: 15
+
+runtime:
+  precision: fp32                      # no half-precision rounding in the depth head
+  max_image_side: 2560
+  detect_every_n_frames: 1
+  deterministic: true                  # reproducible results for audit trails
+
+api:
+  max_concurrent_inferences: 1

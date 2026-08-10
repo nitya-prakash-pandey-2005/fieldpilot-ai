@@ -39,6 +39,7 @@ from agents.measurement.calibration import (
     calibrate_from_reference,
 )
 from agents.measurement import depth as depth_mod
+from agents.measurement import measurecv_backend as mcv
 from agents.measurement.rebar_spacing import (
     SpacingResult,
     annotate,
@@ -49,6 +50,21 @@ from agents.measurement.rebar_spacing import (
 # 'hybrid' — the full priority ladder above (default; what the demo runs)
 # 'depth'  — force the depth path, for testing it in isolation
 DEPTH_BACKEND = os.getenv("DEPTH_BACKEND", "hybrid").lower()
+
+# Which model supplies the metric depth map for rung 3 of the ladder.
+#
+#   'auto'          Metric3D via measurecv when its weights are present,
+#                   Depth Anything V2 otherwise. Default.
+#   'measurecv'     Metric3D only — refuse rung 3 if it is unavailable.
+#   'depth_anything' DAV2 only, the pre-integration behaviour.
+#
+# Metric3D is preferred because measurecv applies the canonical-camera
+# transform to its output. Both models emit "metric" depth, but Metric3D
+# predicts in a canonical space with a fixed 1000px focal length, and the
+# rescale by f_real/1000 is what actually makes the numbers metres. DAV2-metric
+# skips that step entirely, so its scale is tied to the indoor/outdoor training
+# distribution rather than to this camera.
+DEPTH_PROVIDER = os.getenv("DEPTH_PROVIDER", "auto").lower()
 
 SUPPORTED_TYPES = ("spacing", "clearance", "length", "diameter", "overlap", "angle")
 
@@ -66,8 +82,16 @@ class MeasurementEngine:
                   reference_bbox: Optional[dict] = None,
                   reference_type: Optional[str] = None,
                   reference_length_mm: Optional[float] = None,
-                  device: str = "webcam") -> Calibration:
-        """Run the priority ladder and return the best calibration available."""
+                  device: str = "webcam",
+                  allow_depth: bool = True) -> Calibration:
+        """Run the priority ladder and return the best calibration available.
+
+        `allow_depth=False` stops the ladder after rung 2. Rung 3 costs ~5.6s of
+        CPU inference, which is fine for an explicit capture and far too slow for
+        the Edge-mode loop that is meant to model a phone. Disabling it makes the
+        engine refuse (rung 4) rather than silently blocking the pipeline, which
+        is the honest trade: no marker in frame means no measurement on device.
+        """
         # 1 — ArUco
         if DEPTH_BACKEND in ("aruco", "hybrid"):
             calib = self.aruco.calibrate(image)
@@ -87,21 +111,48 @@ class MeasurementEngine:
                 return calib
 
         # 3 — monocular metric depth
-        if DEPTH_BACKEND in ("hybrid", "depth", "depth_anything", "metric3d"):
-            dmap = depth_mod.estimate_depth(image)
+        if allow_depth and DEPTH_BACKEND in ("hybrid", "depth", "depth_anything", "metric3d"):
+            dmap, provider = self._estimate_depth(image)
             if dmap is not None:
-                return calibrate_from_depth(dmap, image.shape, device=device)
+                calib = calibrate_from_depth(dmap, image.shape, device=device)
+                # Which network produced the depth changes how much the number
+                # can be trusted, so it travels with the calibration rather than
+                # being inferred from env vars at read time.
+                calib.detail["depth_provider"] = provider
+                return calib
 
         # 4 — refuse
         return Calibration(
             method="none", confidence=0.0,
             detail={"reason": "no ArUco marker, no reference object, and depth "
-                              "estimation unavailable",
+                              + ("estimation disabled for this call (allow_depth=False)"
+                                 if not allow_depth else "estimation unavailable"),
+                    "depth_allowed": allow_depth,
                     "depth_status": depth_mod.status(),
                     "remedy": "place a 100mm ArUco marker in frame "
                               "(python models/training/make_aruco.py), or pass "
                               "reference_type=hardhat with the worker's bbox"},
         )
+
+    def _estimate_depth(self, image: np.ndarray) -> tuple[Optional[np.ndarray], str]:
+        """Metric depth map plus the name of the model that produced it.
+
+        Returns (None, reason) when no provider is available — the caller then
+        drops to rung 4 and refuses to measure, which is the correct outcome.
+        """
+        if DEPTH_PROVIDER in ("auto", "measurecv", "metric3d"):
+            dmap = mcv.estimate_metric_depth(image)
+            if dmap is not None:
+                return dmap, "metric3d(measurecv)"
+            if DEPTH_PROVIDER != "auto":
+                return None, "metric3d_unavailable"
+
+        if DEPTH_PROVIDER in ("auto", "depth_anything", "dav2"):
+            dmap = depth_mod.estimate_depth(image)
+            if dmap is not None:
+                return dmap, "depth_anything_v2"
+
+        return None, "no_depth_provider_available"
 
     # -- public API ---------------------------------------------------------
 
@@ -113,7 +164,8 @@ class MeasurementEngine:
                 reference_type: Optional[str] = None,
                 reference_length_mm: Optional[float] = None,
                 device: str = "webcam",
-                want_annotated: bool = True) -> dict:
+                want_annotated: bool = True,
+                allow_depth: bool = True) -> dict:
         """Measure `measurement_type` in `image`. Returns the Agent 2 payload."""
         t0 = time.time()
 
@@ -125,7 +177,7 @@ class MeasurementEngine:
                                f"supported: {', '.join(SUPPORTED_TYPES)}"}
 
         calib = self.calibrate(image, reference_bbox, reference_type,
-                               reference_length_mm, device)
+                               reference_length_mm, device, allow_depth=allow_depth)
 
         if not calib.ok:
             return {
@@ -328,14 +380,38 @@ class MeasurementEngine:
         return self.measure(image, measurement_type="spacing",
                             reference_length_mm=reference_length_mm)
 
+    # -- object dimensioning (measurecv) ------------------------------------
+
+    def measure_objects(self, image: np.ndarray, **kwargs) -> dict:
+        """Metric L x W x H / volume / distance for discrete objects in frame.
+
+        Complements `measure()` rather than replacing it. `measure()` handles
+        repeated linear patterns (rebar spacing) via a pixels-to-mm scale;
+        this handles discrete objects via full 3-D reconstruction, which is the
+        only way to get a correct answer when the object spans a depth range.
+        """
+        return mcv.measure_objects(image, **kwargs)
+
     def status(self) -> dict:
+        # Resolve availability first: it triggers the (cheap) pipeline
+        # construction, so reading mcv.status() afterwards reports the state
+        # that actually applies rather than the pre-load one.
+        dimensioning_available = mcv.available()
         return {
             "agent": "measurement",
             "calibration_backend": DEPTH_BACKEND,
+            "depth_provider": DEPTH_PROVIDER,
             "aruco": {"dict": os.getenv("ARUCO_DICT", "DICT_4X4_50"),
                       "marker_mm": float(os.getenv("ARUCO_MARKER_MM", "100.0"))},
             "depth": depth_mod.status(),
+            "measurecv": mcv.status(),
             "rebar_model": os.getenv("REBAR_MODEL_PATH") or None,
             "reference_objects": sorted(REFERENCE_OBJECTS_MM),
             "supported_types": list(SUPPORTED_TYPES),
+            "dimensioning": {
+                "available": dimensioning_available,
+                "returns": ["length", "width", "height", "volume", "distance"],
+                "unit": "mm (volume in litres)",
+                "uncertainty": "every value carries sigma and a 95% interval",
+            },
         }

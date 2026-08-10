@@ -1,0 +1,134 @@
+# measurecv -- default configuration
+#
+# Balanced accuracy and throughput for a single GPU. Every value here is also
+# settable via environment variables using MEASURECV__SECTION__FIELD, e.g.
+#   MEASURECV__DETECTION__SCORE_THRESHOLD=0.6
+#
+# Unknown keys are rejected at startup rather than ignored, so a typo fails
+# loudly instead of silently leaving the default in place.
+
+log_level: INFO
+log_json: false
+output_dir: outputs
+
+detection:
+  backend: transformers
+  # RT-DETRv2 R50 is the accuracy/latency sweet spot.
+  #   r18vd  -> edge / real-time
+  #   r101vd -> maximum accuracy
+  model_id: PekingU/rtdetr_v2_r50vd
+  score_threshold: 0.45
+  max_detections: 100
+  # Restrict to specific COCO classes, e.g. [box, suitcase, chair]
+  class_whitelist: null
+  min_box_area_px: 64
+  compile_model: false
+
+segmentation:
+  backend: transformers
+  model_id: facebook/sam2.1-hiera-large
+  # Ask SAM for 3 hypotheses and keep the best by predicted IoU. Nearly free
+  # (the mask decoder is tiny) and materially better on ambiguous prompts.
+  multimask_output: true
+  use_point_prompt: true
+  box_prompt_padding: 0.0
+  min_mask_area_px: 100
+  fill_holes_px: 256
+  remove_specks_px: 64
+
+depth:
+  backend: torch_hub
+  hub_repo: yvanyin/metric3d
+  # metric3d_vit_small (fast) | vit_large (balanced) | vit_giant2 (best)
+  model_name: metric3d_vit_large
+  input_size: [616, 1064]
+  # DO NOT CHANGE unless you retrained the model. Metric3D is trained in a
+  # canonical camera space with this focal length; the value is what converts
+  # network output back to metres.
+  canonical_focal: 1000.0
+  min_depth_m: 0.05
+  max_depth_m: 200.0
+  # Relative 1-sigma of the metric scale, from Metric3D v2's reported zero-shot
+  # absolute-relative error on unseen cameras. This is the accuracy floor for
+  # an uncalibrated setup.
+  scale_uncertainty: 0.05
+  use_confidence: true
+
+calibration:
+  # Path to intrinsics JSON from `measurecv calibrate`. THE single largest
+  # accuracy improvement available -- without it, scale is uncertain to ~15%.
+  profile: null
+  allow_exif: true
+  default_hfov_deg: 60.0
+  undistort: true
+  board_type: chessboard
+  board_shape: [9, 6]
+  square_size_m: 0.025
+  min_calibration_views: 8
+  max_rms_error_px: 1.0
+
+measurement:
+  # Boundary pixels blend foreground and background depth. Eroding removes
+  # them; the resulting silhouette shrinkage is measured and compensated
+  # automatically, so raising this costs samples but not accuracy.
+  mask_erode_px: 3
+  depth_edge_suppression: true
+  depth_edge_threshold: 0.06
+  outlier_mad_scale: 3.0
+  statistical_outlier_k: 16
+  statistical_outlier_std: 2.0
+  min_points: 120
+  max_points: 20000
+
+  # A support plane fixes the vertical axis exactly, turning an ill-posed 3-D
+  # box fit into an exactly solvable 2-D one. Keep enabled for objects on
+  # floors, tables or conveyors.
+  estimate_ground_plane: true
+  ground_ransac_iterations: 600
+  ground_distance_threshold_m: 0.02
+  ground_min_inlier_ratio: 0.12
+  gravity_prior_deg: 35.0
+
+  dimension_method: auto
+  volume_method: auto
+  obb_percentile: 1.0
+  surface_area_correction: true
+  monte_carlo_samples: 0
+  reject_truncated: true
+  min_confidence: 0.0
+
+tracking:
+  enabled: true
+  max_age: 30
+  min_hits: 3
+  iou_threshold: 0.3
+  # Only detections at or above this spawn new tracks. Set it above your
+  # detector's typical score and tracking will never start.
+  high_threshold: 0.6
+  smoothing: ema
+  smoothing_alpha: 0.35
+  smoothing_window: 9
+
+runtime:
+  device: auto
+  precision: auto
+  deterministic: false
+  warmup: true
+  max_image_side: 1600
+  detect_every_n_frames: 1
+  queue_size: 8
+  drop_frames_when_busy: true
+
+api:
+  host: 0.0.0.0
+  port: 8000
+  # Keep at 1 on a GPU: each worker would load its own copy of the weights.
+  # Scale with replicas behind a load balancer instead.
+  workers: 1
+  cors_origins: ["*"]
+  max_upload_mb: 50
+  enable_metrics: true
+  enable_docs: true
+  # SET THIS before exposing the service. Empty means no authentication.
+  api_keys: []
+  max_concurrent_inferences: 2
