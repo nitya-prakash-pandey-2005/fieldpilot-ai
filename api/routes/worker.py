@@ -279,20 +279,29 @@ async def ask(req: AskRequest):
 
     # -- 1. what did they say --------------------------------------------
     transcript, stt_backend = (req.text or "").strip(), "typed"
+    stt_attempts: list[dict] = []
     if req.audio_b64 and not transcript:
-        from agents.voice.transcriber import VoiceAgent
+        import asyncio
+        from agents.voice import stt as stt_mod
         raw = base64.b64decode(req.audio_b64.split(",", 1)[-1])
-        try:
-            out = await VoiceAgent().transcribe(raw, req.audio_filename)
-            transcript = (out or {}).get("transcript", "").strip() if isinstance(out, dict) else str(out).strip()
-            stt_backend = "whisper-large-v3-turbo (Groq)"
-        except Exception as e:
-            return {"status": "stt_failed", "error": f"{type(e).__name__}: {e}",
-                    "answer": None, "audio_base64": None}
+        out = await asyncio.to_thread(stt_mod.transcribe, raw, req.audio_filename)
+        transcript, stt_backend, stt_attempts = out.text.strip(), out.backend, out.attempts
 
     if not transcript:
+        # Distinguish "you said nothing" from "every speech backend refused us".
+        # Telling a worker to speak up when the real problem is a rejected API
+        # key sends them into a loop that cannot succeed.
+        failed = [a for a in stt_attempts if a.get("error")]
+        if failed:
+            return {
+                "status": "stt_failed",
+                "answer": "Speech recognition is unavailable, so I could not hear that. "
+                          "Type your question instead, or check the site server.",
+                "transcript": "", "audio_base64": None,
+                "stt_attempts": stt_attempts,
+            }
         return {"status": "no_speech",
-                "answer": "I did not catch that. Tap the microphone and ask again.",
+                "answer": "I did not catch that. Hold the button while you speak.",
                 "transcript": "", "audio_base64": None}
 
     intent = classify(transcript)
@@ -413,6 +422,7 @@ async def _cite_for(query: str, project_id: str) -> list[dict]:
 @router.get("/status")
 async def status():
     """What the worker device can rely on right now."""
+    from agents.voice import stt as stt_mod
     from agents.voice import tts as tts_mod
 
     try:
@@ -425,8 +435,7 @@ async def status():
     return {
         "safety_loop": {"detector": edge, "repeat_after_s": HAZARD_REPEAT_S},
         "question_loop": {
-            "stt": {"backend": "whisper-large-v3-turbo (Groq)",
-                    "available": bool(os.getenv("GROQ_API_KEY"))},
+            "stt": stt_mod.status(),
             "vlm": {"backend": "gemini", "available": bool(os.getenv("GEMINI_API_KEY"))},
             "tts": tts_mod.status(),
             "intents": ["describe", "measure", "knowledge"],

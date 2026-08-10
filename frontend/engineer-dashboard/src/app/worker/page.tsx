@@ -209,37 +209,85 @@ export default function WorkerPage() {
   const startListening = useCallback(async () => {
     const s = streamRef.current;
     if (!s) return;
+
+    // The shift stream carries a video track as well as audio. Handing that
+    // whole stream to MediaRecorder while asking for an audio-only mimeType
+    // throws NotSupportedError — the container cannot hold the video track it
+    // was just given. Record an audio-only view of the same stream.
+    const audioTracks = s.getAudioTracks();
+    if (!audioTracks.length) {
+      say({ who: 'system', text: 'No microphone on this stream. End the shift and start it again, allowing the mic.', tone: 'warn' });
+      return;
+    }
+    const audioStream = new MediaStream(audioTracks);
+
+    // Format support is not universal: Safari/iOS has no webm encoder at all
+    // and produces audio/mp4, so a hardcoded webm both fails to start there and
+    // — worse — would mislabel the upload if it ever succeeded. Whisper infers
+    // the format from the filename extension, so the chosen type has to travel
+    // with the audio rather than being assumed downstream.
+    const candidates = [
+      'audio/webm;codecs=opus', 'audio/webm',
+      'audio/mp4;codecs=mp4a.40.2', 'audio/mp4',
+      'audio/ogg;codecs=opus', 'audio/ogg',
+    ];
+    const mime = candidates.find(m => MediaRecorder.isTypeSupported?.(m)) ?? '';
+
+    let rec: MediaRecorder;
+    try {
+      rec = new MediaRecorder(audioStream, mime ? { mimeType: mime } : undefined);
+    } catch (e: any) {
+      say({ who: 'system', text: `This browser cannot record audio: ${e?.message ?? e}`, tone: 'warn' });
+      return;
+    }
+
     chunksRef.current = [];
-    const rec = new MediaRecorder(s, { mimeType: MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : '' });
     rec.ondataavailable = e => { if (e.data.size) chunksRef.current.push(e.data); };
-    rec.onstop = async () => {
-      const blob = new Blob(chunksRef.current, { type: 'audio/webm' });
+    rec.onerror = (e: any) => {
+      setListening(false);
+      say({ who: 'system', text: `Recording stopped: ${e?.error?.message ?? 'unknown error'}`, tone: 'warn' });
+    };
+    rec.onstop = () => {
+      // Use what the recorder actually produced, not what was requested — a
+      // browser may fall back to a different container than the one asked for.
+      const type = rec.mimeType || mime || 'audio/webm';
+      const blob = new Blob(chunksRef.current, { type });
       if (blob.size < 1200) {
         say({ who: 'system', text: 'That was too short to hear. Hold the button while you speak.', tone: 'warn' });
         return;
       }
+      const ext = type.includes('mp4') ? 'mp4' : type.includes('ogg') ? 'ogg' : 'webm';
       const reader = new FileReader();
-      reader.onload = () => askWith(String(reader.result).split(',')[1]);
+      reader.onload = () => askWith(String(reader.result).split(',')[1], `audio.${ext}`);
       reader.readAsDataURL(blob);
     };
+
+    try {
+      rec.start();
+    } catch (e: any) {
+      say({ who: 'system', text: `Could not start recording: ${e?.message ?? e}`, tone: 'warn' });
+      return;
+    }
     recorderRef.current = rec;
-    rec.start();
     setListening(true);
   }, [say]);
 
   const stopListening = useCallback(() => {
-    recorderRef.current?.stop();
+    const rec = recorderRef.current;
+    // A quick tap can release before start() resolved, leaving the recorder
+    // inactive; calling stop() on it throws an InvalidStateError.
+    if (rec && rec.state !== 'inactive') rec.stop();
     setListening(false);
   }, []);
 
-  const askWith = useCallback(async (audio_b64: string) => {
+  const askWith = useCallback(async (audio_b64: string, filename = 'audio.webm') => {
     setThinking(true);
     try {
       const res = await fetch(`${API}/api/v1/worker/ask`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          audio_b64, audio_filename: 'audio.webm',
+          audio_b64, audio_filename: filename,
           frame_b64: grabFrame(1280), worker_id: workerId, zone_id: zone, mode,
         }),
       });
