@@ -1,0 +1,49 @@
+# Training-only dependencies (Track A). NOT needed to run the API or the demo —
+# api/requirements.txt covers that, and installing this on the demo laptop just
+# pulls a CUDA toolchain nothing there will use.
+#
+#   pip install -r models/training/requirements.txt
+#
+# Install torch FIRST and match it to the container's CUDA driver, because the
+# default PyPI wheel is not always the right build:
+#   pip install torch torchvision --index-url https://download.pytorch.org/whl/cu121
+# Check what you got before starting a 12-hour job:
+#   python -c "import torch;print(torch.__version__, torch.cuda.is_available())"
+#   python scripts/check_hardware.py --train
+
+# --- detector + rebar keypoints (T1, T2) ---
+ultralytics==8.*      # YOLO11-seg / RT-DETR training + val + ONNX export
+                      # NOTE: AGPL-3.0. See the README licence section — this
+                      # obligation deepens when you fine-tune, because the
+                      # weights become a derivative work.
+
+# --- dataset acquisition (T0) ---
+roboflow              # D1/D5/D8/D9/D10 download; needs ROBOFLOW_API_KEY
+pyyaml                # taxonomy.yaml + dataset yaml
+pillow
+opencv-python-headless  # headless: a Jupyter container has no display server
+
+# --- evaluation artefacts (§7, TRAINING_PLAN §10) ---
+matplotlib            # confusion matrix, PR curves, class histogram
+pandas
+scikit-learn          # per-class P/R, calibration checks
+
+# --- edge export (T7) ---
+onnx
+onnxruntime           # CPU is fine; INT8 calibration does not need the GPU
+onnxslim
+
+# --- predictive RFI (T6, CPU-only) ---
+lightgbm
+
+# --- optional, only if you run the LoRA jobs (T3/T4/T5) ---
+# Left commented because each pulls a large tree and TRAINING_PLAN rates T4 as
+# skippable. Uncomment the block you actually intend to run.
+# transformers>=5.0
+# datasets
+# accelerate
+# peft
+# bitsandbytes
+# sentence-transformers   # T5 embedding fine-tune
+# jiwer                   # T3 WER scoring
+# librosa                 # T3 audio
