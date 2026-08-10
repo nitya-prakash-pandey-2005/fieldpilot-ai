@@ -1,5 +1,9 @@
 ultralytics==8.*
-transformers==4.*
+# >=5.0 is required by agents/vision/gemma_analyzer.py: Gemma 4 loads through
+# AutoModelForMultimodalLM, which does not exist in the 4.x namespace. This was
+# pinned ==4.* before that backend landed. measurecv (measure/, transformers>=4.56)
+# was re-run against 5.15 on the bump — all 299 of its tests still pass.
+transformers>=5.0
 torch==2.*
 torchvision
 opencv-python

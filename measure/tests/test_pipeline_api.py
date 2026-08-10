@@ -578,7 +578,7 @@ class TestLiveStreaming:
         assert response.status_code == 200
         body = response.text
         # The pieces the page cannot work without.
-        for token in ("getUserMedia", "/v1/stream/ws", "requestAnimationFrame", "toBlob"):
+        for token in ("getUserMedia", "/v1/stream/ws", "requestAnimationFrame", "toBlob", "voice_query"):
             assert token in body, f"live page missing {token}"
 
     def test_live_page_warns_about_secure_context(self, api_client) -> None:
@@ -634,6 +634,39 @@ class TestLiveStreaming:
 
             ws.send_text(json.dumps({"command": "bogus"}))
             assert ws.receive_json()["type"] == "error"
+
+    def test_voice_query_returns_synthesized_audio(self, api_client, monkeypatch) -> None:
+        def fake_synthesize(text: str) -> bytes:
+            assert text == "what is the size of the pipe"
+            return b"FAKE_WAV_BYTES"
+
+        monkeypatch.setattr(
+            "measurecv.api.routers.stream.synthesize", fake_synthesize
+        )
+        with api_client.websocket_connect("/v1/stream/ws") as ws:
+            ws.send_text(json.dumps({
+                "command": "voice_query",
+                "text": "what is the size of the pipe",
+            }))
+            audio = ws.receive_bytes()
+
+        assert audio == b"FAKE_WAV_BYTES"
+
+    def test_voice_query_missing_text_is_an_error(self, api_client) -> None:
+        with api_client.websocket_connect("/v1/stream/ws") as ws:
+            ws.send_text(json.dumps({"command": "voice_query"}))
+            error = ws.receive_json()
+        assert error["type"] == "error"
+
+    def test_voice_query_rejects_non_string_and_oversized_text(self, api_client) -> None:
+        with api_client.websocket_connect("/v1/stream/ws") as ws:
+            ws.send_text(json.dumps({"command": "voice_query", "text": 123}))
+            assert ws.receive_json()["type"] == "error"
+
+            ws.send_text(json.dumps({"command": "voice_query", "text": "x" * 501}))
+            error = ws.receive_json()
+            assert error["type"] == "error"
+            assert "500" in error["message"]
 
 
 class TestLiveSession:

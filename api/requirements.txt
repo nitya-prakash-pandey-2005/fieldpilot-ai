@@ -42,6 +42,13 @@ onnx
 onnxruntime
 lapx                  # Windows-compatible drop-in for 'lap' (BoT-SORT tracker)
 
+# --- orchestration (the 10-agent graph) ---
+# agents/orchestrator/graph.py imports these at module scope, and api/main.py
+# imports routes.orchestrator at startup — so without langgraph the API does not
+# boot at all, it does not merely lose the graph. Was missing from every
+# requirements file until an audit caught it against a clean interpreter.
+langgraph             # StateGraph/START/END + MemorySaver checkpointer
+
 # --- language / voice ---
 groq                  # Whisper STT + LLM (agents/voice/transcriber.py) — unguarded import
 sentence-transformers # BGE embeddings for RAG (agents/memory/retriever.py)

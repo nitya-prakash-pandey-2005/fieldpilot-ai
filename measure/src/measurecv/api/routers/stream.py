@@ -30,12 +30,13 @@ from fastapi.responses import HTMLResponse, StreamingResponse
 from measurecv.api.deps import AppState, get_state, require_api_key
 from measurecv.api.metrics import get_metrics
 from measurecv.api.static import LIVE_PAGE
-from measurecv.core.exceptions import MeasureCVError
+from measurecv.core.exceptions import MeasureCVError, VoiceError
 from measurecv.core.logging import get_logger
 from measurecv.core.types import Frame
 from measurecv.pipeline.pipeline import MeasurementPipeline
 from measurecv.pipeline.sources import decode_image_bytes, open_source
 from measurecv.viz.annotate import AnnotationStyle, draw_scene
+from measurecv.voice.tts import synthesize
 
 log = get_logger(__name__)
 
@@ -77,7 +78,8 @@ async def websocket_stream(websocket: WebSocket) -> None:
 
     Text messages are treated as control commands: ``{"command": "reset"}``
     clears tracker and temporal state, ``{"command": "stats"}`` returns
-    throughput counters.
+    throughput counters, and ``{"command": "voice_query", "text": "..."}``
+    returns synthesized speech audio for the given text.
 
     Each connection gets its **own pipeline view** for tracking state, because
     two clients streaming different cameras must not share track identities --
@@ -190,7 +192,7 @@ async def websocket_stream(websocket: WebSocket) -> None:
 async def _handle_command(
     websocket: WebSocket,
     pipeline: MeasurementPipeline,
-    text: str,
+    text_raw: str,
     processed: int,
     dropped: int,
     started: float,
@@ -198,10 +200,11 @@ async def _handle_command(
     import json
 
     try:
-        command = json.loads(text).get("command")
+        payload = json.loads(text_raw)
     except json.JSONDecodeError:
         await websocket.send_json({"type": "error", "message": "control messages must be JSON"})
         return
+    command = payload.get("command")
 
     if command == "reset":
         pipeline.reset_state()
@@ -217,6 +220,24 @@ async def _handle_command(
                 "pipeline": pipeline.stats(),
             }
         )
+    elif command == "voice_query":
+        text = payload.get("text")
+        if not isinstance(text, str) or not text.strip():
+            await websocket.send_json(
+                {"type": "error", "message": "voice_query requires a non-empty 'text' field"}
+            )
+            return
+        if len(text) > 500:
+            await websocket.send_json(
+                {"type": "error", "message": "voice_query text must be 500 characters or fewer"}
+            )
+            return
+        try:
+            audio = await asyncio.to_thread(synthesize, text)
+        except VoiceError as exc:
+            await websocket.send_json({"type": "error", **exc.to_dict()})
+            return
+        await websocket.send_bytes(audio)
     else:
         await websocket.send_json({"type": "error", "message": f"unknown command: {command}"})
 

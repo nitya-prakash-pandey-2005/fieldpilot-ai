@@ -14,9 +14,32 @@ load_dotenv()
 # and utils/llm_client.py's Gemini branch.
 GEMINI_VLM_MODEL = os.getenv("GEMINI_VLM_MODEL", "gemini-flash-latest")
 
+# gemini | gemma. Gemma 4 runs locally (agents/vision/gemma_analyzer.py) and is
+# the offline/edge-consistent path: no API key, no network, Apache-2.0. Gemini
+# stays the default because it needs neither 8B of weights on disk nor a GPU, so
+# an unconfigured checkout behaves exactly as it did before this backend existed.
+#
+# The two are NOT silently interchangeable and must never fall back to each
+# other: "edge mode reached for the network" is the specific dishonesty the edge
+# path in agents/edge/runtime.py refuses to commit, and the same rule applies
+# here. If the selected backend cannot serve, it says so and stops.
+VLM_BACKEND = os.getenv("VLM_BACKEND", "gemini").lower()
+
 
 class VLMAnalyzer:
-    def __init__(self):
+    def __init__(self, backend: str = None):
+        self.backend = (backend or VLM_BACKEND).lower()
+
+        if self.backend == "gemma":
+            # Imported lazily: gemma_analyzer is import-safe on transformers 4.x,
+            # but there is no reason to pull torch into a Gemini-only process.
+            from agents.vision.gemma_analyzer import GemmaAnalyzer
+            self._gemma = GemmaAnalyzer.instance()
+            self.model_name = self._gemma.model_id
+            print(f"VLM backend: gemma (local) — {self.model_name}")
+            return
+
+        self._gemma = None
         self.api_key = os.getenv("GEMINI_API_KEY")
         if not self.api_key:
             print("WARNING: GEMINI_API_KEY not set. VLM Analyzer will fail.")
@@ -31,6 +54,11 @@ class VLMAnalyzer:
         worker_query: str = None,
         project_context: str = ""
     ) -> dict:
+
+        if self._gemma is not None:
+            return await self._gemma.analyze_scene(
+                image_base64, zone_id, language, worker_query, project_context
+            )
 
         query = worker_query or "What is happening in this construction scene? Any safety issues or compliance concerns?"
 
@@ -101,6 +129,27 @@ Analyze the scene and respond EXACTLY in this JSON format:
             "confidence": 0.0
         }
 
+    async def identify_objects(self, image_base64: str, hint: str = "") -> dict:
+        """Open-vocabulary "what is this" — Gemma-only.
+
+        Deliberately not emulated on the Gemini path. Gemini could answer it, but
+        the point of this call is the local brain; quietly serving it from an API
+        would make an offline capability claim that a network cable disproves.
+        """
+        if self._gemma is None:
+            return {
+                "status": "unavailable",
+                "reason": f"identify_objects requires VLM_BACKEND=gemma (current: {self.backend})",
+                "objects": [],
+                "backend": self.backend,
+            }
+        return await self._gemma.identify_objects(image_base64, hint)
+
     @classmethod
     def warmup(cls):
+        if VLM_BACKEND == "gemma":
+            from agents.vision.gemma_analyzer import GemmaAnalyzer
+            print("Warming up VLM (Gemma 4, local — first load pulls ~8B weights)...")
+            GemmaAnalyzer.instance()._load()
+            return
         print("Warming up VLM (Gemini API)...")

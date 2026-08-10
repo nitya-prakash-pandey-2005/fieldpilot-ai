@@ -42,6 +42,39 @@ vlm_analyzer = VLMAnalyzer()
 # learning_agent = LearningAgent()
 # notification_agent = NotificationAgent()
 
+@router.get("/brain/status")
+async def brain_status():
+    """Which scene-reasoning backend is live, and if Gemma is selected, whether
+    its weights actually loaded. Reports without forcing an 8B load."""
+    from agents.vision.gemma_analyzer import GemmaAnalyzer
+    from agents.vision.vlm_analyzer import VLM_BACKEND
+
+    payload = {"backend": VLM_BACKEND}
+    if VLM_BACKEND == "gemma":
+        payload["gemma"] = GemmaAnalyzer.instance().status()
+    return payload
+
+
+@router.post("/identify")
+async def identify_objects(
+    image: str = Body(..., embed=True, description="Base64 encoded image"),
+    hint: str = Body("", embed=True, description="Optional focus, e.g. 'structural elements'"),
+):
+    """Open-vocabulary object identification — Gemma 4 as the brain.
+
+    Distinct from /analyze, which is YOLO's fixed class list. This names things
+    no detector in the repo has a class for (rebar cage, formwork, cable tray).
+    Returns 503 with the specific reason when the model is not loaded, rather
+    than an empty list that would read as "nothing in the frame".
+    """
+    from fastapi import HTTPException as _HTTPException
+
+    result = await vlm_analyzer.identify_objects(image, hint)
+    if result.get("status") != "ok":
+        raise _HTTPException(status_code=503, detail=result)
+    return _json_safe(result)
+
+
 @router.post("/analyze")
 async def analyze_image(file: UploadFile = File(...)):
     """

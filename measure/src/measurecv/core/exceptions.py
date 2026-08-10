@@ -19,6 +19,7 @@ __all__ = [
     "ModelLoadError",
     "SourceError",
     "UnsupportedInputError",
+    "VoiceError",
 ]
 
 
@@ -98,3 +99,11 @@ class SourceError(MeasureCVError):
 
     status_code = 400
     code = "source_error"
+
+
+class VoiceError(MeasureCVError):
+    """Speech synthesis or recognition failed (missing binary, model, or
+    a failed subprocess call)."""
+
+    status_code = 503
+    code = "voice_error"

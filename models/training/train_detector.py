@@ -80,6 +80,55 @@ def preflight(data_yaml: Path) -> dict:
     return cfg
 
 
+def vram_preflight(args) -> None:
+    """Refuse a config that will OOM, before the run rather than hours into it.
+
+    Written for a SHARED lab GPU. Total VRAM is the wrong number to plan against
+    there — an 80 GB card with 10 GB free trains like a 10 GB card, and
+    `torch.cuda.get_device_properties().total_memory` cheerfully reports 80.
+    This reads what is actually free.
+
+    The estimate is a coarse linear fit for YOLO-seg (activations scale with
+    batch x imgsz^2), deliberately rough: it exists to catch the 3x-too-big case,
+    not to predict allocator behaviour to the megabyte. It warns and suggests
+    rather than blocking, because the caller may know something it does not —
+    a neighbour's job about to end, or gradient checkpointing enabled upstream.
+    """
+    try:
+        import torch
+        if not torch.cuda.is_available():
+            return
+        free_b, total_b = torch.cuda.mem_get_info()
+    except Exception:
+        return                                   # never let a check break the run
+
+    free, total = free_b / 1e9, total_b / 1e9
+
+    # ~1.5 GB of weights/optimizer/CUDA context for the m-size model, plus
+    # activations. Calibrated against TRAINING_PLAN §3's known-good points:
+    # batch 16 @ 960 needs ~24 GB, batch 8 @ 960 needs ~16 GB.
+    est = 1.5 + args.batch * (args.imgsz / 960.0) ** 2 * 1.4
+
+    print(f"  vram: {free:.1f} GB free of {total:.1f} GB total  |  "
+          f"estimate for batch={args.batch} imgsz={args.imgsz}: ~{est:.1f} GB")
+
+    if total - free > 2.0:
+        print(f"  ⚠ {total - free:.1f} GB is already allocated by someone else. "
+              f"On a shared GPU that can grow mid-run — prefer --resume-friendly "
+              f"settings and check `nvidia-smi` before a long job.")
+
+    if est > free * 0.92:                        # leave headroom for fragmentation
+        safe = max(1, int((free * 0.92 - 1.5) / max(1e-6, (args.imgsz / 960.0) ** 2 * 1.4)))
+        print(
+            f"\n  ⚠ THIS WILL PROBABLY OOM. ~{est:.1f} GB needed, {free:.1f} GB free.\n"
+            f"    Try:  --batch {safe}                     (same imgsz, fewer images)\n"
+            f"      or: --imgsz 800 --batch {max(1, int(safe * 1.44))}   (cheaper, but imgsz is\n"
+            f"          the biggest accuracy lever for rebar/conduit — TRAINING_PLAN §3)\n"
+            f"    Ultralytics --batch -1 auto-sizes, but it probes against total VRAM\n"
+            f"    and will over-commit on a shared card. Set it explicitly.\n"
+        )
+
+
 def group_metrics(metrics, class_ids: list[int], taxonomy: dict) -> dict:
     """Per-group mAP. Ultralytics gives per-class AP arrays in
     metrics.box.ap50 / .ap, indexed by position in metrics.box.ap_class_index —
@@ -122,6 +171,8 @@ def main():
         print("⚠ CUDA not available. This will take days on CPU.")
         print("  Train on the GPU box (docs/TRAINING_PLAN.md §1), or pass --device cpu to proceed anyway.")
         raise SystemExit(1)
+
+    vram_preflight(args)
 
     model = Loader(args.resume or args.model)
 

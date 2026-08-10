@@ -28,15 +28,11 @@ outputs/
 *.ply
 *.obj
 
-# Model weights and caches -- never commit, they are gigabytes.
-#
-# These are anchored with a leading slash so they match only the download
-# directories at the package root. Unanchored, `models/` also matches
-# `src/measurecv/models/` -- the RT-DETR, SAM 2, Metric3D and ONNX backends --
-# silently excluding 13 source files from every commit and leaving a clone that
-# fails at `import measurecv` with no indication why.
+# Model weights and caches -- never commit, they are gigabytes
+# Anchored to repo root: unqualified "models/" also matched the real
+# src/measurecv/models/ source package and silently excluded it from git.
 /models/
-/checkpoints/
+checkpoints/
 *.pth
 *.pt
 *.onnx
@@ -48,3 +44,9 @@ calibration/*.json
 !calibration/example.json
 
 .env
+
+# Claude Code harness state (worktrees, local session data)
+.claude/
+
+# Subagent-driven-development scratch workspace
+.superpowers/

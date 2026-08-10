@@ -1,4 +1,9 @@
-# FieldPilot-28 unified detection taxonomy.
+# FieldPilot-30 unified detection taxonomy.
+#
+# Was FieldPilot-28; ids 28 (trench) and 29 (ladder) were APPENDED for Phase 2's
+# Fatal Four coverage. Appending rather than reordering is deliberate — every
+# pre-existing id keeps its meaning, so weights and runtime code trained against
+# the 28-class space stay valid and only gain two classes they never predict.
 #
 # THIS FILE IS A CONTRACT. The runtime vision code (agents/vision/detector.py,
 # ppe_detector.py, equipment_detector.py, hazard_analyzer.py) keys off these
@@ -44,6 +49,15 @@ classes:
   # Site hazard context
   26: safety_cone
   27: guardrail
+  # Fatal Four geometry (Phase 2 §3). These two exist so Agent 11 can answer
+  # "is a worker in an unprotected trench?" and "is that ladder at a safe
+  # angle?" — the caught-in/between and fall rules. Without them those rules
+  # can only ever return `unavailable`, which is honest but useless, and
+  # caught-in/between is ~5% of construction deaths with zero coverage today.
+  # Added after 27 deliberately: appending keeps every existing id stable, so
+  # weights and runtime code trained against FieldPilot-28 do not shift.
+  28: trench
+  29: ladder
 
 # Groups used by the evaluator to report per-subset mAP (see TRAINING_PLAN §3).
 groups:
@@ -51,11 +65,20 @@ groups:
   equipment:  [12, 13, 14, 15, 16, 17, 18, 19]
   structural: [20, 21, 22, 23, 24, 25]
   context:    [0, 26, 27]
+  # Reported as its own subset because Phase 2 is judged on Fatal Four coverage.
+  # A mean mAP that folds these into 30 classes would hide the one number that
+  # decides whether Agent 11's trench and ladder rules can ship at all.
+  fatal_four: [28, 29, 27, 10]
 
 # Classes we expect to be data-starved. prepare_datasets.py warns loudly if a
 # class NOT on this list also lands under the threshold — that means a mapping
 # bug, not a known data gap.
-known_sparse: [6, 11, 25, 24]
+#
+# 28/29 are here from day one and for a different reason than the others: public
+# trench and ladder data is genuinely scarce, so expect low AP and SAY SO in the
+# eval table rather than quoting a mean that buries it. If they come back
+# unexpectedly dense, check the mapping before believing it.
+known_sparse: [6, 11, 25, 24, 28, 29]
 
 sources:
 
@@ -181,3 +204,54 @@ sources:
       "guardrail":    27
       "handrail":     27
       "railing":      27
+
+  # ── D9: trench / excavation — OSHA "caught-in/between" ──────────────────
+  #
+  # VERIFY THESE BEFORE RUNNING (Phase 2 §4.0). The workspace/project/version
+  # triples below are the search targets, not confirmed-good coordinates —
+  # Roboflow Universe projects get renamed, re-versioned and deleted, and a
+  # wrong version silently fetches a different label set. Open each on
+  # universe.roboflow.com, confirm the label strings match the mapping, then
+  # record name/licence/count/date in docs/DATASETS.md.
+  #
+  # Why the shoring labels matter as much as the trench itself: the rule
+  # Agent 11 implements is "person inside a trench polygon with NO shoring and
+  # no ladder within the egress distance". Detecting the trench alone tells you
+  # where the hazard could be; detecting shoring is what makes it a PASS.
+  D9:
+    kind: roboflow_multi
+    projects:
+      - {workspace: construction-safety, project: trench-detection,     version: 1}
+      - {workspace: excavation,          project: excavation-detection, version: 1}
+    format: yolov8
+    mapping:
+      "trench":           28
+      "excavation":       28
+      "trench-box":       null   # the protective system, not the hazard — see below
+      "shoring":          null   # TODO(Phase2): promote to its own class once
+      "trench_box":       null   #   there is enough data; mapping protection onto
+      "shield":           null   #   the hazard id would make a shored trench read
+      "person":           0      #   as an unshored one, i.e. invert the verdict
+      "worker":           0
+      "ladder":           29
+      "excavator":        12
+      "pipe":             24
+
+  # ── D10: ladders — fall hazard, OSHA's largest killer ───────────────────
+  #
+  # Same verification requirement as D9. Ladder angle (the 4:1 rule) is computed
+  # geometrically from the detected box plus depth in Agent 11 — this class only
+  # has to localise the ladder, not classify whether it is safe.
+  D10:
+    kind: roboflow_multi
+    projects:
+      - {workspace: ladder-safety, project: ladder-detection, version: 1}
+    format: yolov8
+    mapping:
+      "ladder":           29
+      "step-ladder":      29
+      "stepladder":       29
+      "extension-ladder": 29
+      "person":           0
+      "hardhat":          1
+      "helmet":           1

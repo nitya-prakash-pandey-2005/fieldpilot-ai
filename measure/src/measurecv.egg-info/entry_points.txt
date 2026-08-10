@@ -1,0 +1,2 @@
+[console_scripts]
+measurecv = measurecv.cli:app

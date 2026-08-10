@@ -1,0 +1,224 @@
+{
+  "analytic": [
+    [
+      "rotated rectangle, long side",
+      0.4,
+      0.3998822930213658,
+      "m",
+      0.006
+    ],
+    [
+      "rotated rectangle, short side",
+      0.25,
+      0.2499023600630661,
+      "m",
+      0.006
+    ],
+    [
+      "ground plane height",
+      1.4,
+      1.3999999999999493,
+      "m",
+      0.02
+    ],
+    [
+      "cuboid length",
+      0.3,
+      0.3,
+      "m",
+      0.01
+    ],
+    [
+      "cuboid width",
+      0.2,
+      0.20000000000000007,
+      "m",
+      0.01
+    ],
+    [
+      "cuboid height",
+      0.45,
+      0.4480956347290511,
+      "m",
+      0.01
+    ],
+    [
+      "cuboid volume",
+      0.027,
+      0.026957347314503066,
+      "m^3",
+      0.00324
+    ],
+    [
+      "plate width (full pipeline)",
+      0.5,
+      0.4979646071760522,
+      "m",
+      0.008
+    ],
+    [
+      "plate height (full pipeline)",
+      0.3,
+      0.3031088913245535,
+      "m",
+      0.008
+    ],
+    [
+      "plate range (full pipeline)",
+      2.0,
+      2.0,
+      "m",
+      0.06
+    ]
+  ],
+  "end_to_end": [
+    {
+      "image": "bus.jpg",
+      "objects": 5,
+      "measured": 5,
+      "calibration": "assumed_fov",
+      "total_ms": 95672.6,
+      "results": [
+        {
+          "label": "bus",
+          "dimensions_m": [
+            5.1967,
+            1.072,
+            2.7012
+          ],
+          "relative_error": 0.1555,
+          "distance_m": 4.439,
+          "confidence": 0.883,
+          "warnings": [
+            "camera intrinsics are assumed, not calibrated; scale may be off by ~15%"
+          ]
+        },
+        {
+          "label": "person",
+          "dimensions_m": [
+            0.5738,
+            0.1906,
+            1.7209
+          ],
+          "relative_error": 0.1572,
+          "distance_m": 2.656,
+          "confidence": 0.859,
+          "warnings": [
+            "camera intrinsics are assumed, not calibrated; scale may be off by ~15%"
+          ]
+        },
+        {
+          "label": "person",
+          "dimensions_m": [
+            0.5744,
+            0.2479,
+            1.6327
+          ],
+          "relative_error": 0.1572,
+          "distance_m": 2.994,
+          "confidence": 0.4,
+          "warnings": [
+            "object touches the frame border; measurements are lower bounds",
+            "camera intrinsics are assumed, not calibrated; scale may be off by ~15%",
+            "object is clipped by the frame border; true extent exceeds what is visible"
+          ]
+        },
+        {
+          "label": "person",
+          "dimensions_m": [
+            0.3984,
+            0.2416,
+            1.6837
+          ],
+          "relative_error": 0.1572,
+          "distance_m": 2.808,
+          "confidence": 0.867,
+          "warnings": [
+            "camera intrinsics are assumed, not calibrated; scale may be off by ~15%"
+          ]
+        },
+        {
+          "label": "person",
+          "dimensions_m": [
+            0.2196,
+            0.1187,
+            0.5964
+          ],
+          "relative_error": 0.1572,
+          "distance_m": 1.805,
+          "confidence": 0.4,
+          "warnings": [
+            "object touches the frame border; measurements are lower bounds",
+            "camera intrinsics are assumed, not calibrated; scale may be off by ~15%",
+            "object is clipped by the frame border; true extent exceeds what is visible"
+          ]
+        }
+      ]
+    },
+    {
+      "image": "zidane.jpg",
+      "objects": 4,
+      "measured": 4,
+      "calibration": "assumed_fov",
+      "total_ms": 2291.1,
+      "results": [
+        {
+          "label": "person",
+          "dimensions_m": [
+            1.0365,
+            0.6036,
+            0.1991
+          ],
+          "relative_error": 0.1571,
+          "distance_m": 1.797,
+          "confidence": 0.874,
+          "warnings": [
+            "camera intrinsics are assumed, not calibrated; scale may be off by ~15%"
+          ]
+        },
+        {
+          "label": "person",
+          "dimensions_m": [
+            1.1701,
+            0.7227,
+            0.2932
+          ],
+          "relative_error": 0.1581,
+          "distance_m": 1.568,
+          "confidence": 0.878,
+          "warnings": [
+            "camera intrinsics are assumed, not calibrated; scale may be off by ~15%"
+          ]
+        },
+        {
+          "label": "tie",
+          "dimensions_m": [
+            0.4168,
+            0.069,
+            0.0373
+          ],
+          "relative_error": 0.1565,
+          "distance_m": 1.654,
+          "confidence": 0.766,
+          "warnings": [
+            "camera intrinsics are assumed, not calibrated; scale may be off by ~15%"
+          ]
+        },
+        {
+          "label": "tie",
+          "dimensions_m": [
+            0.6377,
+            0.1291,
+            0.0369
+          ],
+          "relative_error": 0.1577,
+          "distance_m": 1.994,
+          "confidence": 0.631,
+          "warnings": [
+            "camera intrinsics are assumed, not calibrated; scale may be off by ~15%"
+          ]
+        }
+      ]
+    }
+  ]
+}

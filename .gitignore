@@ -84,6 +84,11 @@ data/qdrant_local/
 models/weights/kokoro-v1.0.onnx
 models/weights/voices-v1.0.bin
 
+# Gemma 4 GGUF weights — 4.59GB model + 0.56GB vision projector, same 100MB
+# GitHub blob ceiling as Kokoro above. Fetched on demand by
+# scripts/serve_gemma_gguf.py, which also verifies a partial download.
+models/weights/gemma4/
+
 # cloudflared binary, downloaded per-platform to expose the dashboard over HTTPS
 # so a phone will grant camera/microphone access. Fetch the build for your OS
 # from github.com/cloudflare/cloudflared/releases rather than committing 51MB.

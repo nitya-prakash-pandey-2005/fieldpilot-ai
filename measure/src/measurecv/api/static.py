@@ -123,6 +123,12 @@ LIVE_PAGE = """<!doctype html>
   <button id="stop" class="ghost" disabled>Stop</button>
 </header>
 
+<div style="padding:.6rem 1rem;border-bottom:1px solid var(--line);background:var(--panel);display:flex;gap:.5rem;">
+  <input id="voice-text" type="text" placeholder="what is the size of the pipe"
+         style="flex:1;background:var(--bg);color:var(--ink);border:1px solid var(--line);border-radius:3px;padding:.4rem .6rem;font:inherit;">
+  <button id="ask" disabled>Ask</button>
+</div>
+
 <main>
   <div class="stage">
     <video id="video" playsinline muted autoplay></video>
@@ -220,6 +226,7 @@ LIVE_PAGE = """<!doctype html>
     ws.onclose = () => { running = false; setStatus("", "disconnected"); };
     ws.onerror = () => setStatus("err", "socket error");
     ws.onmessage = (ev) => {
+      if (ev.data instanceof ArrayBuffer) { playAudio(ev.data); return; }
       let msg;
       try { msg = JSON.parse(ev.data); } catch (_) { return; }
       if (msg.type === "error") { setStatus("err", msg.message || "error"); inFlight = false; return; }
@@ -234,7 +241,7 @@ LIVE_PAGE = """<!doctype html>
       render(msg);
     };
 
-    $("start").disabled = true; $("stop").disabled = false;
+    $("start").disabled = true; $("stop").disabled = false; $("ask").disabled = false;
   }
 
   function stop() {
@@ -242,8 +249,22 @@ LIVE_PAGE = """<!doctype html>
     if (ws) { ws.close(); ws = null; }
     if (stream) { stream.getTracks().forEach((t) => t.stop()); stream = null; }
     ctx.clearRect(0, 0, overlay.width, overlay.height);
-    $("start").disabled = false; $("stop").disabled = true;
+    $("start").disabled = false; $("stop").disabled = true; $("ask").disabled = true;
     setStatus("", "stopped");
+  }
+
+  function playAudio(buffer) {
+    const blob = new Blob([buffer], { type: "audio/wav" });
+    const url = URL.createObjectURL(blob);
+    const audio = new Audio(url);
+    audio.addEventListener("ended", () => URL.revokeObjectURL(url));
+    audio.play().catch((err) => setStatus("err", "audio playback blocked: " + err.name));
+  }
+
+  function askQuestion() {
+    const text = $("voice-text").value.trim();
+    if (!text || !ws || ws.readyState !== WebSocket.OPEN) return;
+    ws.send(JSON.stringify({ command: "voice_query", text }));
   }
 
   let fpsStart = performance.now();
@@ -354,6 +375,7 @@ LIVE_PAGE = """<!doctype html>
 
   $("start").addEventListener("click", start);
   $("stop").addEventListener("click", stop);
+  $("ask").addEventListener("click", askQuestion);
   window.addEventListener("beforeunload", stop);
   listCameras();
   if (!window.isSecureContext) {

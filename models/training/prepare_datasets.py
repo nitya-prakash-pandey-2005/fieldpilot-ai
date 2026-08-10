@@ -3,7 +3,7 @@
 T0 — Dataset download + harmonization into the FieldPilot-28 taxonomy.
 
 Merges every source dataset listed in taxonomy.yaml into one Ultralytics-format
-detection dataset at <out>/fieldpilot28/, with a SCENE-AWARE train/val/test
+detection dataset at <out>/fieldpilot<N>/, with a SCENE-AWARE train/val/test
 split (see --help for why that matters).
 
 Usage
@@ -267,7 +267,14 @@ def fetch_roboflow(cfg: dict, cache: Path, source_id: str) -> list[Path]:
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--out", default="data/training", help="output root")
-    ap.add_argument("--datasets", default="D1,D5,D8", help="comma-separated ids from taxonomy.yaml")
+    # D1,D5,D8 are the Roboflow-fetchable core (no manual download). D9/D10 add
+    # trench and ladder — the two classes Agent 11's Fatal Four rules need, and
+    # the reason the taxonomy went 28 -> 30. They are in the default because
+    # omitting them trains a detector that CANNOT support those rules, and that
+    # is a silent capability gap rather than a visible one.
+    # D2/D3/D4/D6/D7 still need --dN-root; they are opt-in by design.
+    ap.add_argument("--datasets", default="D1,D5,D8,D9,D10",
+                    help="comma-separated ids from taxonomy.yaml")
     ap.add_argument("--taxonomy", default=str(HERE / "taxonomy.yaml"))
     ap.add_argument("--cache", default="data/training/_downloads")
     ap.add_argument("--rebuild", action="store_true", help="wipe output before building")
@@ -281,7 +288,12 @@ def main() -> int:
 
     tax = load_taxonomy(Path(args.taxonomy))
     classes = tax["classes"]
-    out_root = Path(args.out) / "fieldpilot28"
+    # Named from the taxonomy, not hardcoded: the class count is now a
+    # variable (28 -> 30 when trench/ladder landed) and a directory called
+    # fieldpilot28 holding 30 classes is precisely the drift that makes a
+    # later reader trust the wrong number.
+    ds_name = f"fieldpilot{len(classes)}"
+    out_root = Path(args.out) / ds_name
     cache = Path(args.cache)
     cache.mkdir(parents=True, exist_ok=True)
 
@@ -376,7 +388,7 @@ def main() -> int:
                 per_source[source_id] += 1
 
     # ---- dataset yaml -----------------------------------------------------
-    yaml_path = out_root / "fieldpilot28.yaml"
+    yaml_path = out_root / f"{ds_name}.yaml"
     yaml_path.write_text(yaml.safe_dump({
         "path": str(out_root.resolve()),
         "train": "train/images",

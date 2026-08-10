@@ -1,0 +1,421 @@
+Metadata-Version: 2.4
+Name: measurecv
+Version: 1.0.0
+Summary: Production-grade metric object measurement from RGB images, video and live camera streams.
+Author: measurecv contributors
+License: Apache-2.0
+Project-URL: Documentation, https://github.com/measurecv/measurecv#readme
+Project-URL: Source, https://github.com/measurecv/measurecv
+Keywords: computer-vision,metrology,rt-detr,sam2,metric3d,depth-estimation
+Classifier: Development Status :: 5 - Production/Stable
+Classifier: Intended Audience :: Science/Research
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Topic :: Scientific/Engineering :: Image Recognition
+Requires-Python: >=3.11
+Description-Content-Type: text/markdown
+Requires-Dist: numpy>=1.26
+Requires-Dist: scipy>=1.11
+Requires-Dist: opencv-python-headless>=4.9
+Requires-Dist: pillow>=10.2
+Requires-Dist: pydantic>=2.6
+Requires-Dist: pydantic-settings>=2.2
+Requires-Dist: pyyaml>=6.0
+Requires-Dist: structlog>=24.1
+Requires-Dist: typer>=0.12
+Requires-Dist: rich>=13.7
+Provides-Extra: models
+Requires-Dist: torch>=2.2; extra == "models"
+Requires-Dist: torchvision>=0.17; extra == "models"
+Requires-Dist: transformers>=4.56; extra == "models"
+Requires-Dist: timm>=0.9; extra == "models"
+Requires-Dist: safetensors>=0.4; extra == "models"
+Requires-Dist: huggingface-hub>=0.23; extra == "models"
+Provides-Extra: api
+Requires-Dist: fastapi>=0.110; extra == "api"
+Requires-Dist: uvicorn[standard]>=0.29; extra == "api"
+Requires-Dist: python-multipart>=0.0.9; extra == "api"
+Requires-Dist: websockets>=12.0; extra == "api"
+Requires-Dist: prometheus-client>=0.20; extra == "api"
+Requires-Dist: orjson>=3.10; extra == "api"
+Provides-Extra: onnx
+Requires-Dist: onnx>=1.16; extra == "onnx"
+Requires-Dist: onnxruntime-gpu>=1.18; extra == "onnx"
+Provides-Extra: voice
+Requires-Dist: piper-tts>=1.2; extra == "voice"
+Provides-Extra: dev
+Requires-Dist: pytest>=8.1; extra == "dev"
+Requires-Dist: pytest-cov>=5.0; extra == "dev"
+Requires-Dist: pytest-asyncio>=0.23; extra == "dev"
+Requires-Dist: httpx>=0.27; extra == "dev"
+Requires-Dist: ruff>=0.4; extra == "dev"
+Requires-Dist: mypy>=1.9; extra == "dev"
+Requires-Dist: types-PyYAML; extra == "dev"
+Requires-Dist: hypothesis>=6.100; extra == "dev"
+Provides-Extra: all
+Requires-Dist: measurecv[api,dev,models,onnx,voice]; extra == "all"
+
+# measurecv
+
+Metric object measurement from RGB images, video and live camera streams.
+
+RT-DETR detection → SAM 2 segmentation → Metric3D metric depth → camera-calibrated geometric reconstruction, with propagated uncertainty on every number.
+
+```
+Input (image / video / live camera)
+        │
+   Preprocessing ──────── resize + rectify; intrinsics scaled to match
+        │
+   RT-DETR ────────────── NMS-free detection (no duplicate/merged boxes)
+        │
+   SAM 2 ──────────────── pixel-accurate masks from box prompts
+        │
+   Metric3D ───────────── metric depth via canonical-camera transform
+        │
+   Calibration ────────── intrinsics + support-plane world frame
+        │
+   Measurement engine ─── dimensions · area · volume · distance · 3-D pose
+        │                 confidence · error propagation
+        │
+   Visualisation / REST API / CLI / JSON · CSV · COCO · PLY
+```
+
+---
+
+## What makes this accurate
+
+Getting a plausible number out of a monocular pipeline is easy. Getting a *correct* one requires handling four things that are individually easy to miss and each cost 5–40% error.
+
+**1. The canonical camera transform.** Metric3D is trained in a canonical camera space with a fixed 1000 px focal length. Raw network output is in canonical units and must be rescaled by `f_real × resize_scale / 1000`. Skip it and depth looks perfect — smooth, correctly ordered, right-shaped — while being wrong by the ratio of your focal length to 1000. On a typical phone photo that's a **40% error with nothing in the output to indicate a problem.** It lives in one function ([`_canonical_to_metric`](src/measurecv/models/depth/metric3d.py)) with dedicated tests.
+
+**2. Boundary bias, measured and corrected.** Depth networks bleed across object silhouettes, so mask-edge pixels carry blended foreground/background depth — and because they sit at the object's outline, they land at the extremes of every principal axis. Eroding them away fixes that but *shrinks the object*. This system measures the shrinkage (via a distance transform of the original mask) and adds it back.
+
+> On a synthetic 500 mm plate: **34 mm short before correction, 2 mm after.**
+
+**3. Trimmed extents that aren't biased.** Using the 1st/99th percentiles instead of min/max resists outliers, but for a filled silhouette it also throws away 2% of the real object. The trim is inverted analytically so it stays robust *and* unbiased.
+
+**4. A support plane instead of free PCA.** From one viewpoint you see at most three faces, so the principal axes of the visible surface are not the object's axes. Fitting the floor (RANSAC with a gravity prior, so it can't latch onto a wall) fixes the vertical exactly and reduces the fit to a minimum-area rectangle, which rotating calipers solves *exactly*.
+
+### Every number carries an error bar
+
+```json
+{
+  "length": {
+    "value": 0.4231, "sigma": 0.0219, "unit": "m",
+    "confidence": 0.87, "method": "ground_aligned",
+    "interval_95": [0.3802, 0.4660]
+  }
+}
+```
+
+`sigma` and `confidence` mean different things and you should read both:
+
+| | Question it answers | Driven by |
+|---|---|---|
+| **`sigma`** | How wide is the error bar, assuming the method applies? | Depth scale, focal length, pixel localisation, sample count |
+| **`confidence`** | Does the method apply here at all? | Mask quality, filter retention, truncation, conditioning, calibration provenance |
+
+The error budget distinguishes **systematic** from **random** sources, which matters more than it sounds:
+
+- Systematic (metric scale, focal length) **does not shrink with more pixels or more frames**. Averaging a million pixels does not fix a 5% scale bias.
+- Random (per-pixel depth noise, boundary localisation) shrinks — but as `√n_eff` with `n_eff = √n`, not `√n`, because monocular depth error is spatially correlated over tens of pixels.
+
+So watching a static object for ten minutes gives a **very precise wrong answer** if the focal length is off, and the reported sigma says so instead of collapsing toward zero.
+
+Volume gets this right too: three lengths that all ride on the same depth scale mean a 5% scale error is a **15% volume error** — correlated errors add linearly, not in quadrature.
+
+---
+
+## Install
+
+```bash
+pip install -e ".[models,api]"     # full stack
+pip install -e ".[dev]"            # geometry + tests only, no torch
+```
+
+The geometry, calibration and measurement core depends only on numpy/scipy/OpenCV, so it installs and tests without torch or a GPU.
+
+## Running with real weights
+
+```bash
+pip install -e ".[models]" timm mmengine
+```
+
+Weights download automatically on first run and cache in `~/.cache` (set `HF_HOME` / `TORCH_HOME` to relocate).
+
+**There is nothing to train.** All three models are pretrained and used zero-shot. A GPU makes them *run* faster and lets you use the larger variants; it is not needed for fine-tuning. You would only train if you needed an object class outside RT-DETR's 80 COCO classes — and then only the detector.
+
+| Preset | Detection | Segmentation | Depth | Download | Needs |
+|---|---|---|---|---|---|
+| `configs/cpu.yaml` | r18vd (20 M) | hiera-tiny (31 M) | ViT-Small | ~500 MB | CPU, ~15 s/frame |
+| `configs/gpu.yaml` | **r101vd** (76 M) | **hiera-large** (224 M) | **ViT-Large** | ~2.9 GB | <8 GB VRAM |
+| `configs/high_accuracy.yaml` | r101vd | hiera-large | **ViT-giant2** | ~6.7 GB | ~12 GB VRAM |
+
+```bash
+measurecv measure photo.jpg -c configs/gpu.yaml --annotate out.png --depth depth.png
+```
+
+### Live camera
+
+```bash
+measurecv stream 0 -c configs/webcam.yaml          # laptop webcam, OpenCV window
+measurecv serve  -c configs/webcam.yaml            # then open /v1/stream/live
+```
+
+**Display and measurement run at independent rates.** The preview stays at camera framerate in a worker-thread architecture while measurement proceeds as fast as the hardware allows, with the newest result overlaid and *its age shown on screen*. Measured on a CPU laptop:
+
+| | |
+|---|---|
+| Display | **28 fps** |
+| Measurement | 0.30 fps (~3.3 s each) |
+| Frames skipped by the worker | 1310 / 1325 — this is what keeps the video smooth |
+| Errors | 0 |
+
+Running measurement inline would give you a preview that freezes for seconds at a time and looks broken. On a GPU the same architecture simply closes the gap between the two rates.
+
+### Browser and phone
+
+`GET /v1/stream/live` serves a camera client that runs **in the browser** — same page for a laptop webcam and a phone. `getUserMedia` grabs frames, they go over the existing WebSocket, and measurements are drawn back over the page's own video element. No app, no install.
+
+One requirement: `getUserMedia` needs a **secure context**. `localhost` counts, so a laptop works over plain HTTP. A phone on the LAN does not — use HTTPS or a tunnel (`ngrok http 8000`, `cloudflared`, or an SSH forward). The page detects this and says so instead of silently handing you a null camera.
+
+### Two performance traps
+
+Both are counter-intuitive and both were measured, not assumed:
+
+1. **Lowering `runtime.max_image_side` barely helps.** RT-DETR, SAM 2 and Metric3D each resize to their *own* fixed window, so input resolution only affects the geometry stage. 960 px → 384 px was 13.7 s → 12.5 s, a 9% saving for 6× fewer pixels.
+
+2. **Never shrink `depth.input_size` to go faster.** It looks safe — 2× quicker, and the canonical transform appears to compensate — but Metric3D's learned priors are resolution-dependent, so depth drifts badly. Nothing errors; the map still looks perfectly reasonable.
+
+   | `input_size` | Latency | Depth error |
+   |---|---|---|
+   | 616 × 1064 *(trained)* | 7520 ms | baseline |
+   | 462 × 798 | 3700 ms | **+17.6%** |
+   | 308 × 532 | 1490 ms | **+31.7%** |
+   | 224 × 392 | 750 ms | **+44.8%** |
+
+   Use `runtime.depth_every_n_frames` instead. It reuses the depth map between frames, keeping the network at its trained resolution, and flags any frame measured against a reused surface.
+
+### Colab / Kaggle
+
+`notebooks/measurecv_gpu.ipynb` is a self-contained GPU notebook: install, download weights, measure an uploaded photo, visualise, calibrate, export. Enable the GPU runtime first (Colab: *Runtime → Change runtime type → T4*). `configs/gpu.yaml` fits a free T4 with headroom.
+
+### Verified result
+
+Run end-to-end on CPU against a COCO indoor scene, **uncalibrated**:
+
+| Object | Measured (L × W × H) | Sanity check |
+|---|---|---|
+| person | 0.33 × 0.35 × **1.53 m** | plausible adult height |
+| chair | 0.66 × 0.27 × **0.49 m** | typical seat height |
+| refrigerator | 1.50 × 0.52 × **1.43 m** | plausible unit |
+| vase | 0.08 × 0.06 × **0.17 m** | plausible |
+| diningtable | 0.66 × 0.39 × 0.05 m | **flagged, 40% confidence** — only the tabletop is visible, so this is its thickness, not its height |
+
+That last row is the system working as intended: it did not silently report a wrong height, it reported a low confidence and a warning.
+
+### Two Metric3D issues handled for you
+
+Metric3D's published hub script does not run out of the box; the backend works around both automatically:
+
+- **It imports `mmcv` but never calls it.** The only uses are inside commented-out code, yet the import still runs — which would otherwise force you to install OpenMMLab's compiled package (no wheels on recent Python). A shim forwards the real `Config`/`get_git_hash` from pure-Python `mmengine`.
+- **Its decode head hardcodes `device="cuda"`.** The published model raises `Torch not compiled with CUDA enabled` on any CPU-only or Apple Silicon machine. A scoped context manager remaps the `device` kwarg on torch factory calls, restores the originals afterwards, and is a no-op on an actual GPU. The tensors involved are index and anchor grids, so the numbers are unchanged.
+
+You still need `timm` and `mmengine` installed — they are genuine runtime dependencies of the hub script that it does not declare.
+
+### Two Metric3D issues handled for you
+
+Metric3D's published hub script does not run out of the box; the backend works around both automatically:
+
+- **It imports `mmcv` but never calls it.** The only uses are inside commented-out code, yet the import still runs — which would otherwise force you to install OpenMMLab's compiled package (no wheels on recent Python). A shim forwards the real `Config`/`get_git_hash` from pure-Python `mmengine`.
+- **Its decode head hardcodes `device="cuda"`.** The published model raises `Torch not compiled with CUDA enabled` on any CPU-only or Apple Silicon machine. A scoped context manager remaps the `device` kwarg on torch factory calls, restores the originals afterwards, and is a no-op on an actual GPU. The tensors involved are index and anchor grids, so the numbers are unchanged.
+
+You still need `timm` and `mmengine` installed — they are genuine runtime dependencies of the hub script that it does not declare.
+
+### If `measurecv` is "not recognized"
+
+pip installs the console script into Python's `Scripts` directory, which is
+often not on `PATH` — a per-user install on Windows is the usual case. Either
+add it, or skip PATH entirely:
+
+```bash
+python -m measurecv stream 0        # always works; no PATH entry needed
+```
+
+`python -m measurecv` resolves through the interpreter that installed the
+package, so it behaves identically in a venv, a container, and a bare user
+install. Every command below works either way.
+
+To put it on PATH permanently on Windows (then open a **new** terminal):
+
+```powershell
+$s = python -c "import sysconfig,os; print(sysconfig.get_path('scripts',f'{os.name}_user'))"
+[Environment]::SetEnvironmentVariable("Path", "$([Environment]::GetEnvironmentVariable('Path','User'));$s", "User")
+```
+
+## Quick start
+
+```bash
+# Measure a photo
+measurecv measure desk.jpg --annotate out.png --output result.json
+
+# Calibrate first — the single biggest accuracy win available
+measurecv calibrate ./board_photos --board 9x6 --square-size 0.025 -o camera.json
+measurecv measure desk.jpg --calibration camera.json
+
+# Video, with tracking and temporal fusion
+measurecv video clip.mp4 --output results.ndjson --csv results.csv --render annotated.mp4
+
+# Live camera
+measurecv stream 0
+measurecv stream rtsp://camera.local/stream
+
+# Serve the API
+measurecv serve --port 8000
+
+# Exercise the whole pipeline with no weights and no GPU
+measurecv measure photo.jpg --dry-run
+```
+
+### Python
+
+```python
+from measurecv import MeasurementPipeline, load_config
+
+pipeline = MeasurementPipeline(load_config("configs/default.yaml"))
+scene = pipeline.measure_image("desk.jpg")
+
+for obj in scene.objects:
+    d = obj.dimensions
+    if d is None:
+        print(f"{obj.detection.label}: {obj.warnings}")
+        continue
+    print(f"{obj.detection.label}: "
+          f"{d.length.value:.3f} × {d.width.value:.3f} × {d.height.value:.3f} m "
+          f"(±{d.length.relative_error:.1%}, {obj.confidence:.0%} confidence)")
+```
+
+### HTTP
+
+```bash
+curl -X POST http://localhost:8000/v1/measure \
+     -F "file=@desk.jpg" \
+     -F 'options={"include_annotated_image": true}'
+```
+
+| Endpoint | Purpose |
+|---|---|
+| `POST /v1/measure` | Measure one image |
+| `POST /v1/measure/batch` | Several images; per-item failures isolated |
+| `POST /v1/measure/video` | Video with tracking |
+| `WS /v1/stream/ws` | Push frames, receive measurements |
+| `GET /v1/stream/mjpeg` | Annotated MJPEG from a server-side camera |
+| `POST /v1/calibration/intrinsics` | Calibrate from target photos |
+| `POST /v1/calibration/scale` | Refine scale with a known reference object |
+| `GET /health` · `/ready` · `/metrics` | Liveness, readiness, Prometheus |
+
+Interactive docs at `/docs`.
+
+---
+
+## Getting the best accuracy
+
+Ranked by impact:
+
+1. **Calibrate the camera.** Uncalibrated, scale rests on an assumed 60° field of view — roughly **±15%**. A chessboard calibration takes five minutes and gets you to **1–2%**.
+2. **Include a reference object.** A credit card (ISO/IEC 7810, 85.60 mm) or A4 sheet in frame lets `POST /v1/calibration/scale` cancel residual bias directly.
+3. **Keep objects fully in frame.** Truncated objects are detected, flagged, and capped at 0.4 confidence — their measurements are lower bounds, not measurements.
+4. **Let objects rest on a visible surface.** The support plane is what makes height and footprint well-posed.
+
+Check `calibration_source` in every response:
+
+| Value | Meaning | Expected scale accuracy |
+|---|---|---|
+| `calibrated` | Target-based calibration | 1–2% |
+| `exif` | Derived from image metadata | ~5% |
+| `provided` | Supplied by the caller | as stated |
+| `assumed_fov` | **No calibration available** | **~15%** |
+
+---
+
+## Configuration
+
+Layered, typed, and validated: **explicit overrides → environment → YAML → defaults**.
+
+```bash
+measurecv measure photo.jpg -c configs/high_accuracy.yaml
+MEASURECV__DETECTION__SCORE_THRESHOLD=0.6 measurecv serve
+```
+
+| Preset | For | Trade-off |
+|---|---|---|
+| `configs/default.yaml` | General use | Balanced |
+| `configs/high_accuracy.yaml` | Offline metrology, inspection | ~3–4× slower; Monte Carlo error propagation |
+| `configs/realtime.yaml` | Live streams | ~15–30 fps; a few % accuracy given up |
+
+Unknown keys are **rejected at startup**, so `mask_erosion_px` (for `mask_erode_px`) fails loudly instead of silently leaving the default in place. Contradictory settings are caught too — asking for a ground-aligned frame while disabling plane estimation is a startup error, not a surprise at inference time.
+
+---
+
+## Architecture
+
+```
+src/measurecv/
+├── core/           types, config, logging, device, timing
+├── calibration/    intrinsics, Zhang calibration, scale refinement
+├── geometry/       back-projection, filtering, planes, boxes, hulls, uncertainty
+├── measurement/    estimators, engine, temporal fusion
+├── models/         RT-DETR · SAM 2 · Metric3D behind narrow interfaces
+├── tracking/       ByteTrack + Kalman
+├── pipeline/       orchestration, frame sources
+├── viz/            annotation, depth colourisation, PLY/OBJ export
+├── export/         JSON · NDJSON · CSV · COCO
+└── api/            FastAPI app, routers, metrics
+```
+
+Three deliberate boundaries:
+
+- **Geometry depends only on numpy/scipy.** The accuracy-critical math is testable without weights, a GPU, or network access — which is why the accuracy tests run on every commit.
+- **Models sit behind three narrow interfaces** (`Detector`, `Segmenter`, `DepthEstimator`). Swapping in an ONNX or TensorRT backend touches one file. Backends never fall back silently: a misconfigured deployment raises `ModelLoadError` rather than quietly producing fake numbers.
+- **Pydantic at the boundary, dataclasses on the hot path.** Validation buys safety at the API edge and costs more than the geometry it guards inside the loop.
+
+## Testing
+
+```bash
+pytest                                    # full suite, no weights needed
+pytest tests/test_geometry.py -q          # accuracy regressions
+pytest --cov=measurecv --cov-report=html
+```
+
+271 tests, all running against deterministic synthetic backends — no downloads, no GPU. The accuracy tests assert against **closed-form ground truth** (rendered chessboards, analytically-sized billboards, cuboids with known extents), not recorded snapshots, so a geometry regression surfaces as a wrong *number*.
+
+The synthetic backends are test doubles, not fallbacks: they render a metrically self-consistent scene (objects standing on a real ground plane at the depth their base implies), which is what lets an end-to-end test verify the whole chain against an equation.
+
+## Deployment
+
+```bash
+docker compose -f docker/docker-compose.yml up -d
+docker compose -f docker/docker-compose.yml --profile monitoring up -d   # + Prometheus/Grafana
+```
+
+Notes that matter in production:
+
+- Model weights live in a named volume — ~4 GB, and you don't want to re-download on every deploy.
+- `shm_size: 2gb` is required; Docker's 64 MB default causes obscure bus errors under load.
+- Runs as UID 1000, never root.
+- Keep `api.workers: 1` on a GPU — each worker loads its own copy of the weights. Scale with replicas.
+- **Set `api.api_keys` before exposing the service.** It logs a warning at startup when authentication is off; the MJPEG endpoint in particular opens server-side URLs.
+
+## Known limits
+
+Stated plainly, because a measurement system that hides its assumptions is worse than one that doesn't measure:
+
+- **Volume is an inference, not a measurement.** One viewpoint never sees the back of an object. The engine computes four models (extrusion, hull, box, ellipsoid), reports which it used, and folds their disagreement into the error bar. Concave objects are overestimated by the convex closure.
+- **Surface area is the *visible* area**, not the total closed surface.
+- **Metric scale rests on the focal length.** No amount of processing removes a calibration error — only calibration or a reference object does.
+- **Truncated objects give lower bounds.** Flagged, never silently reported as measurements.
+- **The support plane assumes a dominant horizontal surface.** Without one the engine falls back to free PCA boxes and says so in `warnings`.
+
+## License
+
+Apache-2.0. Model weights carry their own licenses — RT-DETR (Apache-2.0), SAM 2 (Apache-2.0), Metric3D (BSD-2-Clause); verify before commercial use.
