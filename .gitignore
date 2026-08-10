@@ -11,8 +11,15 @@ dist/
 downloads/
 eggs/
 .eggs/
-lib/
-lib64/
+# Anchored to the repo root. These come from the standard Python .gitignore,
+# where they mean a build-time lib/ directory beside setup.py -- but unanchored,
+# `lib/` also matches frontend/engineer-dashboard/src/lib/, which holds api.ts
+# (apiBase(), imported by nearly every dashboard component) and
+# visionAnalysis.ts. Both were silently excluded from every commit, so a fresh
+# clone would fail to build with a missing-module error pointing at a file the
+# author can see on disk.
+/lib/
+/lib64/
 parts/
 sdist/
 var/
