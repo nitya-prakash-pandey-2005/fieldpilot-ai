@@ -17,6 +17,10 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const isLoginPage = pathname === '/login';
+  // The worker device is a phone held one-handed in gloves. The desktop shell —
+  // fixed sidebar, header, notification bell — costs most of a phone screen and
+  // navigates nowhere a worker needs to go, so /worker renders bare like /login.
+  const isBarePage = isLoginPage || pathname === '/worker';
 
   useEffect(() => {
     if (!isLoading && !user && !isLoginPage) {
@@ -24,6 +28,11 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
     }
   }, [isLoading, user, isLoginPage, router]);
 
+  // /login is the only page that renders before authentication. /worker is
+  // still gated — it reaches a real site's camera and voice loop — it just
+  // renders without the desktop shell once the worker is signed in. Returning
+  // it here unconditionally would flash the full worker UI for a moment before
+  // the redirect landed.
   if (isLoginPage) {
     return <>{children}</>;
   }
@@ -40,6 +49,10 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
     // Redirect is in flight (useEffect above) — render nothing to avoid a
     // flash of the protected shell.
     return null;
+  }
+
+  if (isBarePage) {
+    return <>{children}</>;
   }
 
   return (
