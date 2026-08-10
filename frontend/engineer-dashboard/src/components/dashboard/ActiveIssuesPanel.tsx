@@ -36,6 +36,7 @@ type FieldIssue = {
   deviation_pct?: number | string | null;
   worker_id?: string | null;
   created_at?: string | null;
+  detected_by?: string | null;
 };
 
 /** "190mm" / "2.3 deg" -> 190 / 2.3. ComplianceCard wants numbers; FieldIssue
@@ -63,6 +64,7 @@ function toComplianceIssue(f: FieldIssue): ComplianceIssue {
     worker_id: f.worker_id ?? null,
     status: f.status ?? 'open',
     created_at: f.created_at ?? new Date().toISOString(),
+    detected_by: f.detected_by ?? null,
   };
 }
 
