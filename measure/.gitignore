@@ -1,0 +1,50 @@
+﻿__pycache__/
+*.py[cod]
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+.eggs/
+.venv/
+venv/
+env/
+
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+htmlcov/
+
+.idea/
+.vscode/
+*.swp
+.DS_Store
+
+# Runtime artefacts
+outputs/
+*.ndjson
+*.ply
+*.obj
+
+# Model weights and caches -- never commit, they are gigabytes.
+#
+# These are anchored with a leading slash so they match only the download
+# directories at the package root. Unanchored, `models/` also matches
+# `src/measurecv/models/` -- the RT-DETR, SAM 2, Metric3D and ONNX backends --
+# silently excluding 13 source files from every commit and leaving a clone that
+# fails at `import measurecv` with no indication why.
+/models/
+/checkpoints/
+*.pth
+*.pt
+*.onnx
+*.engine
+.cache/
+
+# Calibration profiles are camera-specific; commit deliberately if at all
+calibration/*.json
+!calibration/example.json
+
+.env

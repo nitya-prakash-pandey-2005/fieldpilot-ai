@@ -1,0 +1,73 @@
+# Real-time streaming. Targets ~15-30 fps on an RTX 4090-class GPU by trading
+# a few percent of accuracy for a large latency win.
+#
+#   measurecv stream 0 -c configs/realtime.yaml
+#
+# What is given up, and why it is acceptable at video rates:
+#   * Smaller backbones                -> ~1-2% more dimensional error
+#   * Detection every 3rd frame        -> boxes come from the motion model on
+#                                         the other two; SAM still produces a
+#                                         fresh mask every frame, and mask
+#                                         quality is what measurement depends on
+#   * Temporal smoothing over 9 frames -> recovers much of the per-frame noise
+
+log_level: WARNING
+
+detection:
+  model_id: PekingU/rtdetr_v2_r18vd    # smallest RT-DETRv2
+  score_threshold: 0.5
+  max_detections: 30
+  min_box_area_px: 400                 # skip specks that cannot be measured anyway
+  compile_model: true                  # pays for itself over a long stream
+
+segmentation:
+  model_id: facebook/sam2.1-hiera-small
+  multimask_output: false              # one hypothesis; saves a decoder pass
+  use_point_prompt: true
+  fill_holes_px: 128
+  remove_specks_px: 64
+
+depth:
+  model_name: metric3d_vit_small
+  input_size: [420, 728]               # smaller canonical window
+  scale_uncertainty: 0.07              # honest about the smaller model
+  use_confidence: false
+  compile_model: true
+
+calibration:
+  profile: null
+  undistort: false                     # skip the remap; calibrate instead
+
+measurement:
+  mask_erode_px: 2
+  depth_edge_suppression: true
+  statistical_outlier_k: 0             # the kNN filter is the costliest stage
+  min_points: 80
+  max_points: 4000                     # bounds per-object hull/PCA cost
+
+  estimate_ground_plane: true
+  ground_ransac_iterations: 200
+  gravity_prior_deg: 30.0
+
+  volume_method: extrusion             # cheapest model; no 3-D hull
+  obb_percentile: 1.0
+  surface_area_correction: false
+  monte_carlo_samples: 0
+
+tracking:
+  enabled: true
+  max_age: 45                          # survive longer occlusions
+  min_hits: 2
+  smoothing: ema
+  smoothing_alpha: 0.3
+
+runtime:
+  precision: auto                      # bf16/fp16 on GPU
+  max_image_side: 960
+  detect_every_n_frames: 3
+  drop_frames_when_busy: true          # latency over completeness
+  warmup: true
+
+api:
+  max_concurrent_inferences: 1
+  enable_metrics: true

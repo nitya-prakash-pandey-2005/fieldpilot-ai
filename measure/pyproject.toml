@@ -1,0 +1,193 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "measurecv"
+version = "1.0.0"
+description = "Production-grade metric object measurement from RGB images, video and live camera streams."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "Apache-2.0" }
+authors = [{ name = "measurecv contributors" }]
+keywords = ["computer-vision", "metrology", "rt-detr", "sam2", "metric3d", "depth-estimation"]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: Science/Research",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Image Recognition",
+]
+
+# Core runtime: the geometry/measurement engine intentionally depends only on
+# numpy/scipy/opencv so it stays fully testable without model weights or a GPU.
+dependencies = [
+    "numpy>=1.26",
+    "scipy>=1.11",
+    "opencv-python-headless>=4.9",
+    "pillow>=10.2",
+    "pydantic>=2.6",
+    "pydantic-settings>=2.2",
+    "pyyaml>=6.0",
+    "structlog>=24.1",
+    "typer>=0.12",
+    "rich>=13.7",
+]
+
+[project.optional-dependencies]
+# Neural backends. Kept optional so `pip install measurecv` gives a working
+# geometry/calibration library, and CI can test the core without a 3 GB download.
+models = [
+    "torch>=2.2",
+    "torchvision>=0.17",
+    "transformers>=4.56",
+    "timm>=0.9",
+    "safetensors>=0.4",
+    "huggingface-hub>=0.23",
+]
+api = [
+    "fastapi>=0.110",
+    "uvicorn[standard]>=0.29",
+    "python-multipart>=0.0.9",
+    "websockets>=12.0",
+    "prometheus-client>=0.20",
+    "orjson>=3.10",
+]
+onnx = ["onnx>=1.16", "onnxruntime-gpu>=1.18"]
+dev = [
+    "pytest>=8.1",
+    "pytest-cov>=5.0",
+    "pytest-asyncio>=0.23",
+    "httpx>=0.27",
+    "ruff>=0.4",
+    "mypy>=1.9",
+    "types-PyYAML",
+    "hypothesis>=6.100",
+]
+all = ["measurecv[models,api,onnx,dev]"]
+
+[project.scripts]
+measurecv = "measurecv.cli:app"
+
+[project.urls]
+Documentation = "https://github.com/measurecv/measurecv#readme"
+Source = "https://github.com/measurecv/measurecv"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+measurecv = ["py.typed", "configs/*.yaml"]
+
+# ---------------------------------------------------------------------------
+# Tooling
+# ---------------------------------------------------------------------------
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "N", "UP", "B", "C4", "SIM", "RUF", "ANN", "D"]
+ignore = [
+    "ANN401",   # Any is legitimate at torch/transformers boundaries
+    "B008",     # FastAPI Depends() in argument defaults is idiomatic
+    "D203", "D213",  # mutually exclusive with D211/D212; pick one style
+    # Docstring *presence* is a poor automated gate: it produces "Return the
+    # value." noise on self-evident accessors and overrides while saying
+    # nothing about whether the genuinely subtle code is explained. This
+    # codebase documents reasoning where it matters; the linter enforces
+    # module-level docs (D100/D104) and correct formatting instead.
+    "D101", "D102", "D103", "D105", "D107",
+    "D205",     # multi-line summaries are deliberate in the prose-heavy modules
+    "D417",
+    # Optional template-method hooks on ABCs. These are deliberately concrete
+    # no-ops: a backend that holds no GPU state should not be forced to
+    # implement `_unload`. Marking them abstract would make the common case
+    # more work for no safety gain.
+    "B027",
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["D", "ANN", "S101", "SLF001", "E501"]
+"src/measurecv/api/routers/*" = ["B008"]
+# A single embedded HTML/CSS/JS document. Wrapping its CSS rules to satisfy a
+# Python line-length limit would make the stylesheet harder to read, not easier.
+"src/measurecv/api/static.py" = ["E501"]
+# Conventional mathematical notation. `K` is the camera matrix, `S` the
+# innovation covariance, `K` the Kalman gain -- names that match every
+# reference on the subject. Lower-casing them to satisfy a style rule would
+# make the code harder to verify against the literature, which matters more
+# here than naming uniformity.
+"src/measurecv/calibration/intrinsics.py" = ["N802"]
+"src/measurecv/tracking/kalman.py" = ["N806"]
+"src/measurecv/core/timing.py" = ["N802"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.mypy]
+python_version = "3.11"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+no_implicit_optional = true
+plugins = ["pydantic.mypy"]
+
+[[tool.mypy.overrides]]
+module = [
+    "cv2.*", "torch.*", "torchvision.*", "transformers.*", "scipy.*",
+    "onnxruntime.*", "timm.*",
+    # Metric3D's undeclared hub-script dependencies.
+    "mmcv.*", "mmengine.*",
+]
+ignore_missing_imports = true
+
+# OpenCV's type stubs declare every image-returning function as
+# `ndarray[Any, dtype[integer | floating]]` -- a union that can never match a
+# precise `NDArray[np.uint8]` annotation, no matter how correct the code is.
+# The annotations are kept because they document the real contract and are
+# checked by the tests; these four codes are suppressed only in the modules
+# that sit directly on the cv2 boundary, so the precision is lost exactly
+# where the stubs make it unattainable and nowhere else.
+[[tool.mypy.overrides]]
+module = [
+    "measurecv.calibration.board",
+    "measurecv.calibration.resolver",
+    "measurecv.geometry.backproject",
+    "measurecv.models.synthetic",
+    "measurecv.models.depth.metric3d",
+    "measurecv.models.depth.onnx_depth",
+    "measurecv.pipeline.sources",
+    "measurecv.pipeline.pipeline",
+    "measurecv.viz.annotate",
+    "measurecv.cli",
+]
+disable_error_code = ["arg-type", "return-value", "assignment", "no-any-return", "attr-defined", "call-overload", "index"]
+
+# transformers' `PreTrainedModel.to()` is wrapped in a decorator whose stub
+# loses the self-returning signature.
+[[tool.mypy.overrides]]
+module = ["measurecv.models.segmentation.sam2"]
+disable_error_code = ["arg-type", "call-arg"]
+
+[tool.pytest.ini_options]
+minversion = "8.0"
+testpaths = ["tests"]
+addopts = "-ra --strict-markers --strict-config"
+asyncio_mode = "auto"
+markers = [
+    "slow: marks tests as slow",
+    "gpu: requires a CUDA device",
+    "weights: requires downloadable model weights (network)",
+    "integration: end-to-end tests across subsystems",
+]
+
+[tool.coverage.run]
+source = ["src/measurecv"]
+branch = true
+omit = ["*/api/metrics.py"]
+
+[tool.coverage.report]
+exclude_lines = ["pragma: no cover", "if TYPE_CHECKING:", "raise NotImplementedError", "@overload"]

@@ -1,0 +1,89 @@
+# Live webcam on CPU.
+#
+#   measurecv stream 0 -c configs/webcam.yaml
+#
+# Read this before judging the numbers: on CPU a full measurement takes
+# ~10-13 s, dominated by Metric3D (~65%) and SAM 2 (~25%). Neither shrinks
+# usefully with input resolution -- both models resize to their own fixed
+# window regardless of what you feed them.
+#
+# So "live" here means the *preview* is live. Display runs at camera rate
+# while measurement runs in a worker thread and the newest result is overlaid,
+# with its age shown on screen. You get smooth video and numbers that refresh
+# every few seconds, instead of a preview that freezes solid between frames.
+#
+# For genuinely real-time measurement you need a GPU: configs/realtime.yaml.
+#
+# What is tuned here, and why it is safe:
+#   * depth_every_n_frames  -- reuses the depth map, keeping the network at its
+#                              trained resolution. Do NOT shrink depth.input_size
+#                              instead; that silently biases depth by up to 45%.
+#   * ground_plane_every_n  -- the floor does not move for a fixed camera.
+#   * max_detections        -- each object costs a SAM decoder pass.
+
+log_level: WARNING
+
+detection:
+  backend: transformers
+  model_id: PekingU/rtdetr_v2_r18vd
+  score_threshold: 0.55           # fewer, more confident objects
+  max_detections: 5               # the main lever on segmentation cost
+  min_box_area_px: 2500           # skip anything too small to measure anyway
+
+segmentation:
+  backend: transformers
+  model_id: facebook/sam2.1-hiera-tiny
+  multimask_output: false         # one hypothesis instead of three
+  use_point_prompt: true
+  fill_holes_px: 128
+  remove_specks_px: 64
+
+depth:
+  backend: torch_hub
+  model_name: metric3d_vit_small
+  # LEAVE AT THE TRAINED SIZE. See the note in DepthConfig.input_size.
+  input_size: [616, 1064]
+  scale_uncertainty: 0.08
+
+calibration:
+  # Webcams are fixed-focus and fixed-FOV, which makes them the *easiest* thing
+  # to calibrate well -- and a calibrated webcam is the difference between
+  # ~15% and ~2% on every number below. Do it once:
+  #   measurecv calibrate ./board_photos --board 9x6 --square-size 0.025 \
+  #       -o calibration/webcam.json
+  profile: null
+  allow_exif: false               # webcam frames carry no EXIF
+  default_hfov_deg: 60.0
+  undistort: true
+
+measurement:
+  mask_erode_px: 2
+  statistical_outlier_k: 0        # the k-NN filter is pure cost at this scale
+  min_points: 80
+  max_points: 3000
+  estimate_ground_plane: true
+  ground_ransac_iterations: 200
+  volume_method: extrusion        # cheapest model, no 3-D hull
+  surface_area_correction: false
+  monte_carlo_samples: 0
+
+tracking:
+  enabled: true
+  max_age: 60                     # measurement is slow; hold identities longer
+  min_hits: 1                     # confirm immediately -- we get few frames
+  high_threshold: 0.6
+  smoothing: ema
+  smoothing_alpha: 0.4
+
+runtime:
+  device: cpu
+  precision: fp32
+  max_image_side: 640
+  detect_every_n_frames: 4
+  depth_every_n_frames: 8
+  ground_plane_every_n_frames: 20
+  drop_frames_when_busy: true
+  warmup: true
+
+api:
+  max_concurrent_inferences: 1

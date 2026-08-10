@@ -271,6 +271,203 @@ async def measure_and_validate(req: MeasureAndValidateRequest):
 
 
 # ---------------------------------------------------------------------------
+# Object dimensioning — measurecv (RT-DETR -> SAM 2 -> Metric3D)
+#
+# Distinct from /measure above, which answers "how far apart are these two
+# elements?" using a pixels-to-millimetres scale. That scale is only valid at
+# one depth, so it cannot dimension an object that extends away from the
+# camera. These endpoints reconstruct the object in 3-D instead and return
+# L x W x H, volume and standoff distance, each with its own error bar.
+# ---------------------------------------------------------------------------
+
+class MeasureObjectsRequest(BaseModel):
+    frame: str = Field(..., description="base64 JPEG/PNG, with or without a data: prefix")
+    labels: Optional[list[str]] = Field(
+        None, description="restrict to these COCO labels, e.g. ['person','truck']")
+    min_confidence: float = Field(0.0, ge=0.0, le=1.0)
+    max_objects: int = Field(20, ge=1, le=100)
+
+
+@router.post("/objects")
+async def measure_objects_upload(
+    file: UploadFile = File(...),
+    labels: Optional[str] = Form(None, description="comma-separated COCO labels"),
+    min_confidence: float = Form(0.0),
+    max_objects: int = Form(20),
+):
+    """Dimension every object in an uploaded image."""
+    image = _decode(await file.read())
+    result = engine.measure_objects(
+        image,
+        labels=[s.strip() for s in labels.split(",") if s.strip()] if labels else None,
+        min_confidence=min_confidence,
+        max_objects=max_objects,
+    )
+    if result.get("status") == "error":
+        raise HTTPException(400, result.get("message", "dimensioning failed"))
+    result["job_id"] = str(uuid.uuid4())
+    return result
+
+
+@router.post("/objects/frame")
+async def measure_objects_frame(req: MeasureObjectsRequest):
+    """Dimension every object in a base64 frame — the live camera path."""
+    image = _decode_b64(req.frame)
+    result = engine.measure_objects(
+        image,
+        labels=req.labels,
+        min_confidence=req.min_confidence,
+        max_objects=req.max_objects,
+    )
+    if result.get("status") == "error":
+        raise HTTPException(400, result.get("message", "dimensioning failed"))
+    return result
+
+
+class ValidateObjectRequest(BaseModel):
+    frame: str
+    label: str = Field(..., description="which detected object to check, e.g. 'door'")
+    dimension: str = Field("height", description="length | width | height")
+    expected_value: float = Field(..., description="spec value, mm")
+    tolerance_min: float
+    tolerance_max: float
+    standard_ref: str = "project specification"
+    zone_id: str = "A12"
+    asset_id: Optional[str] = None
+    worker_id: Optional[str] = None
+
+
+_DIMENSIONS = ("length", "width", "height")
+
+
+@router.post("/objects/validate")
+async def validate_object_dimension(req: ValidateObjectRequest):
+    """Dimension one object and check it against a spec, honouring the error bar.
+
+    The verdict rule differs from /validate on purpose. A point measurement
+    compared to a threshold flips from PASS to FAIL the moment it crosses,
+    however uncertain it is. Here the 95% interval decides: when a tolerance
+    boundary falls *inside* that interval, the measurement genuinely cannot
+    tell pass from fail, and saying so is the honest answer. Reporting a crisp
+    FAIL from a number whose error bar straddles the limit is how a system
+    ends up issuing a STOP WORK on noise.
+    """
+    import time as _time
+
+    from routes.interactions import record_interaction
+
+    _t0 = _time.time()
+
+    if req.dimension not in _DIMENSIONS:
+        raise HTTPException(400, f"dimension must be one of {', '.join(_DIMENSIONS)}")
+
+    image = _decode_b64(req.frame)
+    measured = engine.measure_objects(image, labels=[req.label], max_objects=5)
+
+    if measured.get("status") != "success" or not measured.get("objects"):
+        reason = measured.get("message") or measured.get("status")
+        await record_interaction(
+            kind="measurement", worker_id=req.worker_id, zone_code=req.zone_id,
+            query=f"Dimension {req.label}.{req.dimension} "
+                  f"(spec {req.expected_value}mm {req.tolerance_min}-{req.tolerance_max})",
+            result=reason, verdict="UNCERTAIN", agent_chain="A2:Dimensioning",
+            latency_ms=round((_time.time() - _t0) * 1000, 1),
+        )
+        return {"measurement": measured, "validation": None,
+                "verdict": "UNCERTAIN", "reason": reason}
+
+    obj = measured["objects"][0]
+    dims = obj.get("dimensions_mm") or {}
+    quantity = dims.get(req.dimension)
+    if not quantity:
+        return {
+            "measurement": measured, "validation": None, "verdict": "UNCERTAIN",
+            "reason": f"{req.label} was detected but its {req.dimension} could not be "
+                      f"reconstructed — {'; '.join(obj.get('warnings', [])) or 'no reason given'}",
+        }
+
+    lo, hi = quantity["interval_95_mm"]
+    straddles = lo < req.tolerance_min < hi or lo < req.tolerance_max < hi
+
+    if straddles:
+        verdict_payload = {
+            "measurement": measured,
+            "validation": None,
+            "verdict": "UNCERTAIN",
+            "reason": (
+                f"{req.label} {req.dimension} measured "
+                f"{quantity['value_mm']}mm ±{quantity['sigma_mm']}mm. The 95% interval "
+                f"[{lo}, {hi}]mm crosses the tolerance limit "
+                f"({req.tolerance_min}–{req.tolerance_max}mm), so this frame cannot "
+                f"decide pass or fail."
+            ),
+            "remedy": (
+                "calibrate the camera (POST /v1/calibration/intrinsics on the measurecv "
+                "service) or include a reference object — an uncalibrated frame carries "
+                "~15% scale error, which dominates this interval"
+            ),
+            "interval_95_mm": [lo, hi],
+        }
+        await record_interaction(
+            kind="measurement", worker_id=req.worker_id, zone_code=req.zone_id,
+            query=f"Dimension {req.label}.{req.dimension} "
+                  f"(spec {req.expected_value}mm {req.tolerance_min}-{req.tolerance_max})",
+            result=verdict_payload["reason"], verdict="UNCERTAIN",
+            confidence=quantity["confidence"], agent_chain="A2:Dimensioning",
+            latency_ms=round((_time.time() - _t0) * 1000, 1),
+        )
+        return verdict_payload
+
+    from agents.compliance.validator import (
+        ComplianceEngine, Measurement, Specification, ValidationRequest,
+    )
+
+    validation = await ComplianceEngine().validate(ValidationRequest(
+        observation_id=str(uuid.uuid4()),
+        asset_id=req.asset_id or f"{req.label}-{uuid.uuid4().hex[:8]}",
+        zone_id=req.zone_id,
+        measurement=Measurement(
+            parameter=f"{req.label}_{req.dimension}",
+            measured_value=float(quantity["value_mm"]),
+            unit="mm",
+            confidence=float(quantity["confidence"]),
+        ),
+        specification=Specification(
+            spec_id=str(uuid.uuid4()),
+            expected_value=req.expected_value,
+            tolerance_min=req.tolerance_min,
+            tolerance_max=req.tolerance_max,
+            unit="mm",
+            standard_ref=req.standard_ref,
+        ),
+    ))
+
+    verdict = (validation or {}).get("result")
+    explanation = (validation or {}).get("explanation") or {}
+    await record_interaction(
+        kind="measurement", worker_id=req.worker_id, zone_code=req.zone_id,
+        query=f"Dimension {req.label}.{req.dimension} "
+              f"(spec {req.expected_value}mm, tolerance {req.tolerance_min}-{req.tolerance_max}mm)",
+        result=explanation.get("worker_message")
+               or f"{quantity['value_mm']}mm measured",
+        verdict=verdict,
+        severity=(validation or {}).get("severity"),
+        confidence=quantity["confidence"],
+        agent_chain="A2:Dimensioning -> A5:Compliance"
+                    + (" -> A9:Notify" if verdict == "FAIL" else ""),
+        latency_ms=round((_time.time() - _t0) * 1000, 1),
+    )
+
+    return {
+        "measurement": measured,
+        "validation": validation,
+        "verdict": verdict,
+        "interval_95_mm": [lo, hi],
+        "interval_clears_tolerance": True,
+    }
+
+
+# ---------------------------------------------------------------------------
 
 @router.get("/status")
 async def measurement_status():
