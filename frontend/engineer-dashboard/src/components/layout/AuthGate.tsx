@@ -24,9 +24,14 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (!isLoading && !user && !isLoginPage) {
-      router.push('/login');
+      // Carry the destination through the login round-trip. Without it every
+      // sign-in lands on the Command Center — which on the worker's phone means
+      // arriving at a desktop dashboard and having to find Worker View in a
+      // collapsed sidebar, wearing gloves.
+      const next = pathname && pathname !== '/' ? `?next=${encodeURIComponent(pathname)}` : '';
+      router.push(`/login${next}`);
     }
-  }, [isLoading, user, isLoginPage, router]);
+  }, [isLoading, user, isLoginPage, pathname, router]);
 
   // /login is the only page that renders before authentication. /worker is
   // still gated — it reaches a real site's camera and voice loop — it just

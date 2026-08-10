@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 
 const DEMO_ACCOUNTS = [
@@ -15,6 +15,7 @@ const DEMO_ACCOUNTS = [
 export default function LoginPage() {
   const { login } = useAuth();
   const router = useRouter();
+  const params = useSearchParams();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -27,7 +28,12 @@ export default function LoginPage() {
     const result = await login(email, password);
     setSubmitting(false);
     if (result.ok) {
-      router.push('/');
+      // Return to whatever was being opened. Only same-site paths are accepted:
+      // a `next` that could point off-site turns the login form into an open
+      // redirect, which is a phishing primitive.
+      const next = params.get('next');
+      const safe = next && next.startsWith('/') && !next.startsWith('//') ? next : '/';
+      router.push(safe);
     } else {
       setError(result.error || 'Login failed');
     }
