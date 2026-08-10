@@ -17,7 +17,27 @@ from agents.drawing.indexer import EMBEDDING_MODEL, EMBEDDING_DIM, collection_na
 # against a single global "drawings_vectors" — two RAG paths that never saw
 # each other's data despite sharing a Qdrant instance).
 embedder = SentenceTransformer(EMBEDDING_MODEL)
-client = QdrantClient(url=os.getenv("QDRANT_URL", "http://localhost:6333"), timeout=float(os.getenv("QDRANT_TIMEOUT", "2.0")))
+
+# Built through the shared factory rather than constructed here, so this path
+# gets the embedded fallback when no Qdrant container is running -- and so the
+# whole process shares one client, which embedded mode requires (it holds an
+# exclusive lock on its storage directory).
+from utils.qdrant_config import get_client as _get_qdrant
+
+
+class _LazyClient:
+    """Defer construction to first use.
+
+    Building the client at import time would probe (and in embedded mode, open
+    and lock) the store just because something imported this module -- including
+    test collection, which must not touch it.
+    """
+
+    def __getattr__(self, name):
+        return getattr(_get_qdrant(), name)
+
+
+client = _LazyClient()
 
 class RetrievalResult(BaseModel):
     text: str

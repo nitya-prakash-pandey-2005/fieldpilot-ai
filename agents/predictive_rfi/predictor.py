@@ -75,7 +75,8 @@ class RFIPredictor:
             from agents.learning.ingestor import QDRANT_COLLECTION, _get_incident_embedder
 
             def _search():
-                client = QdrantClient(url=os.getenv("QDRANT_URL", "http://localhost:6333"), timeout=float(os.getenv("QDRANT_TIMEOUT", "2.0")))
+                from utils.qdrant_config import get_client
+                client = get_client()   # shared: embedded mode allows only one
                 model = _get_incident_embedder()
                 vector = model.encode(query_text).tolist()
                 response = client.query_points(collection_name=QDRANT_COLLECTION, query=vector, limit=top_k)

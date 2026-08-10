@@ -1,0 +1,51 @@
+{
+  "_note": [
+    "Project record set for the demo project — drawings, RFIs, change orders and",
+    "inspection reports that Agent 7 retrieves alongside the OSHA publications.",
+    "",
+    "PROVENANCE, AND WHY IT IS STAMPED ON EVERY CITATION.",
+    "",
+    "These are SYNTHETIC records for a fictional project. They are not excerpts",
+    "from ACI 318, the IBC, or any other published standard, and they must never",
+    "be presented as though they were. The OSHA PDFs ingested alongside them by",
+    "scripts/ingest_spec.py are the opposite: genuine public-domain standard text.",
+    "",
+    "Mixing real standards with invented project paperwork in one index is normal",
+    "-- that is what a real project's document set looks like. The risk is that a",
+    "citation cannot be told apart afterwards. So each record's `source` carries",
+    "the '(demo project record)' suffix, which travels into every RFI citation and",
+    "every spoken answer. An engineer reading a drafted RFI can see at a glance",
+    "whether the clause behind it is a published standard or this project's own",
+    "paperwork.",
+    "",
+    "The text below is the same record set scripts/seed_demo_data.py already",
+    "used; it is consolidated here so the RAG corpus has one definition."
+  ],
+  "documents": [
+    {
+      "id": "S-101-R5",
+      "source": "S-101-R5.pdf (demo project record)",
+      "text": "Zone A12 rebar spacing specification: 150mm center to center, tolerance +/-10mm. Per ACI 318-19 Section 7.7.1. Drawing S-101 Revision 5. Bars shall be uniformly spaced across the mat; cumulative drift over any five consecutive bays shall not exceed 15mm. Where spacing exceeds the stated tolerance, the condition shall be raised as an RFI to the structural engineer of record before concrete placement."
+    },
+    {
+      "id": "RFI-2024-0089",
+      "source": "RFI_2024_0089_resolved.pdf (demo project record)",
+      "text": "RFI-2024-0089 resolved: Column C4 lap splice length confirmed as 600mm by structural engineer James Wilson. See drawing S-102 detail 4A. Splices shall be staggered so that no more than 50 percent of bars are spliced at any one section."
+    },
+    {
+      "id": "CO-047",
+      "source": "change_order_CO047.pdf (demo project record)",
+      "text": "Change order CO-047 approved by David Park. Alternative MEP routing Zone B3 confirmed. Cost neutral. Effective immediately. Coordination drawings to be reissued before rough-in."
+    },
+    {
+      "id": "INSP-C7-2024",
+      "source": "inspection_report_C7_2024.pdf (demo project record)",
+      "text": "Safety inspection Zone C7: All fire suppression pipe clearances verified. Minimum 50mm clearance maintained between pipe and structural steel. Signed off by inspector Mike Torres."
+    },
+    {
+      "id": "S-201-R2",
+      "source": "S-201-R2.pdf (demo project record)",
+      "text": "Formwork and falsework, Zone A12 and B3: minimum clear cover to reinforcement shall be 40mm for internal faces and 50mm where exposed to earth or weather. Formwork shall not be struck until concrete has attained 70 percent of specified characteristic strength, confirmed by cube test."
+    }
+  ]
+}

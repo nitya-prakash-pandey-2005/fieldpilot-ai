@@ -22,7 +22,20 @@ class DocumentIndexer:
     def __init__(self):
         # We initialize the model lazily
         self.model = None
-        self.qdrant_client = QdrantClient(url=QDRANT_URL, timeout=float(os.getenv("QDRANT_TIMEOUT", "2.0")))
+        self._client = None
+
+    @property
+    def qdrant_client(self):
+        """Shared client, built on first use.
+
+        Constructed through utils.qdrant_config so indexing lands in the same
+        store retrieval reads from — including when that store is the embedded
+        one. A second client would fail on its directory lock.
+        """
+        if self._client is None:
+            from utils.qdrant_config import get_client
+            self._client = get_client()
+        return self._client
 
     def _get_model(self):
         if self.model is None:
