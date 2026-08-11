@@ -40,10 +40,15 @@ PORT = int(os.getenv("DASHBOARD_PORT", "3000"))
 
 
 def lan_addresses() -> list[str]:
-    """Private IPv4 addresses of this machine, most likely first.
+    """Private IPv4 addresses of this machine, the routable one first.
 
-    Sorted so a real Wi-Fi/Ethernet address beats a virtual adapter: WSL and
-    Docker leave 172.x bridges behind that are reachable from nothing.
+    Ordering is decided by which interface actually carries the default route,
+    not by guessing from the prefix. An earlier version treated every 172.x
+    address as a virtual adapter, on the theory that WSL and Docker leave
+    bridges behind — but 172.16/12 is a legitimate private range, and on this
+    machine the real Wi-Fi sits at 172.16.20.88 while the WSL bridge is at
+    172.26.128.1. Prefix-guessing would have offered the phone an address
+    reachable from nothing.
     """
     found: set[str] = set()
     try:
@@ -52,25 +57,27 @@ def lan_addresses() -> list[str]:
     except OSError:
         pass
 
-    # The address used to reach the internet is the one a phone on the same
-    # network can also reach. No packet is actually sent.
+    # The source address the OS picks for an external destination is the one on
+    # the default route — i.e. the interface a phone on the same network shares.
+    # UDP connect() assigns a local address without sending a packet.
+    primary: str | None = None
     try:
         with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
             s.connect(("8.8.8.8", 80))
-            found.add(s.getsockname()[0])
+            primary = s.getsockname()[0]
+            found.add(primary)
     except OSError:
         pass
 
-    def rank(ip: str) -> tuple:
+    def usable(ip: str) -> bool:
         a = ipaddress.IPv4Address(ip)
-        virtual = ip.startswith("172.") or ip.startswith("192.168.56.")
-        return (virtual, ip)
+        return a.is_private and not a.is_loopback and not a.is_link_local
 
-    return sorted(
-        (ip for ip in found
-         if ipaddress.IPv4Address(ip).is_private and not ipaddress.IPv4Address(ip).is_loopback),
-        key=rank,
-    )
+    ordered = sorted(ip for ip in found if usable(ip))
+    if primary and primary in ordered:
+        ordered.remove(primary)
+        ordered.insert(0, primary)
+    return ordered
 
 
 def find_mkcert() -> str | None:
