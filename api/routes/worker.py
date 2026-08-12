@@ -91,42 +91,9 @@ def _decode(frame_b64: str) -> np.ndarray:
 
 
 def _speakable(passage: str, limit: int = 260) -> str:
-    """Trim a retrieved passage to something a person can actually listen to.
-
-    Two problems with reading a raw chunk aloud. It starts mid-word — PDF
-    chunking cuts wherever the token budget ran out, so the worker hears
-    "ow what kind of fall protection..." and has no idea they missed anything.
-    And it runs long: Kokoro spends about ten seconds synthesising 400
-    characters, which is ten seconds of a worker standing still holding a tool.
-
-    So: start at the first sentence boundary, end at the last one inside the
-    limit. Truncation is marked rather than silent — a sentence that stops dead
-    sounds like the system crashed mid-answer.
-    """
-    text = " ".join((passage or "").split())
-    if not text:
-        return ""
-
-    # Drop a leading partial sentence, but only if doing so leaves something.
-    for i, ch in enumerate(text[:160]):
-        if ch in ".!?" and i + 2 < len(text):
-            candidate = text[i + 1:].lstrip()
-            if len(candidate) > 60:
-                text = candidate
-            break
-    else:
-        # No boundary found: at least start on a whole word.
-        if text[:1].islower() and " " in text[:40]:
-            text = text.split(" ", 1)[1]
-
-    if len(text) <= limit:
-        return text
-
-    cut = text[:limit]
-    stop = max(cut.rfind("."), cut.rfind("!"), cut.rfind("?"))
-    if stop > limit * 0.5:
-        return cut[:stop + 1]
-    return cut.rsplit(" ", 1)[0] + "…"
+    """Shared with Agent 8 — see agents/voice/tts.py.speakable()."""
+    from agents.voice.tts import speakable
+    return speakable(passage, limit)
 
 
 def _speak(text: str, mode: str) -> tuple[Optional[str], Optional[str]]:

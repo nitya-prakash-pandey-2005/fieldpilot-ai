@@ -157,6 +157,47 @@ def synthesize_speech_local(text: str) -> Optional[str]:
         return None
 
 
+def speakable(passage: str, limit: int = 260) -> str:
+    """Trim a retrieved passage to something a person can actually listen to.
+
+    Two problems with reading a raw chunk aloud. It starts mid-word — PDF
+    chunking cuts wherever the token budget ran out, so the worker hears
+    "ard? who works on a scaffold..." and has no idea they missed anything. And
+    it runs long: Kokoro spends about ten seconds synthesising 400 characters,
+    which is ten seconds of a worker standing still holding a tool.
+
+    Lives here rather than beside one caller because both the worker Q&A route
+    and Agent 8 read passages aloud. It was fixed in the first and not the
+    second, so the same sentence was clean over one path and truncated over the
+    other.
+    """
+    text = " ".join((passage or "").split())
+    if not text:
+        return ""
+
+    # Drop a leading partial sentence, but only if doing so leaves something.
+    for i, ch in enumerate(text[:160]):
+        if ch in ".!?" and i + 2 < len(text):
+            candidate = text[i + 1:].lstrip()
+            if len(candidate) > 60:
+                text = candidate
+            break
+    else:
+        if text[:1].islower() and " " in text[:40]:
+            text = text.split(" ", 1)[1]
+
+    if len(text) <= limit:
+        return text
+
+    cut = text[:limit]
+    stop = max(cut.rfind("."), cut.rfind("!"), cut.rfind("?"))
+    if stop > limit * 0.5:
+        return cut[:stop + 1]
+    # Truncation is marked: a sentence that stops dead sounds like the system
+    # crashed mid-answer.
+    return cut.rsplit(" ", 1)[0] + "…"
+
+
 def synthesize(text: str, mode: str = "cloud",
                api_key: Optional[str] = None) -> tuple[Optional[str], Optional[str]]:
     """Synthesize `text` using the backend that `mode` actually implies.

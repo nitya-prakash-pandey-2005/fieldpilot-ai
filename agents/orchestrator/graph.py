@@ -785,7 +785,8 @@ async def agent8_notification(state: RunState, config) -> dict:
     elif voice.get("transcript"):
         severity, event_type = "info", "worker_query"
         cites = (state.get("knowledge") or {}).get("citations", [])
-        spoken = (f"From the project specs: {cites[0]['excerpt'][:240]}"
+        spoken = (f"From {cites[0].get('source', 'the project specs')}: "
+                  f"{tts_mod.speakable(cites[0]['excerpt'])}"
                   if cites else "I could not find that in the indexed project specs.")
     else:
         severity, event_type = "info", "all_clear"
